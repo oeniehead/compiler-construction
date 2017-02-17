@@ -10,8 +10,7 @@ from Misc import :: Position
 	| NumToken
 	| TerminatorToken
 	| Brace BraceType BraceStyle
-	| UnaryOperator  // je kunt unaire en binaire operatoren niet scheiden tijdens het parsen
-	| BinaryOperator // je kunt unaire en binaire operatoren niet scheiden tijdens het parsen
+	| Operator  // je kunt unaire en binaire operatoren niet scheiden tijdens het parsen
 	| Dot
 	| Comma
 	| TypeIndicator

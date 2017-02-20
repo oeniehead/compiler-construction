@@ -13,6 +13,7 @@ from Misc import :: Position
 	| Operator  // je kunt unaire en binaire operatoren niet scheiden tijdens het parsen
 	| Dot
 	| Comma
+	| SingleQuote
 	| TypeIndicator
 	| TypeArrow
 	| EOFToken

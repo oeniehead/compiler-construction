@@ -37,6 +37,7 @@ readToken =
 					';' = return (Token TerminatorToken ";" pos)
 					'.' = return (Token Dot "." pos)
 					',' = return (Token Comma "," pos)
+					'\'' = return (Token SingleQuote "'" pos)
 					
 					/** Splittable binary operators **/
 					'+' = return (Token Operator "+" pos)

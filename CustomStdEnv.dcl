@@ -21,3 +21,5 @@ import
 	StdEnum
 
 from StdFunc import id, const, o, flip
+
+import StdMaybe

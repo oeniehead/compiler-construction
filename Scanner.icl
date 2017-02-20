@@ -3,18 +3,17 @@ implementation module Scanner
 import Token
 import StringScanner
 import Misc
+import CustomStdEnv
 
-scanner :: String -> [Token]
-scanner input = tokens
-	where
-		(tokens, errors) = runScanner input readTokens
+
+scanner :: String -> ([Token], [Error])
+scanner input = runScanner input (readTokens [])
 		
 readTokens :: [Token] -> Scanner [Token]
 readTokens prev = readToken >>= \token.
-					peek >>> \next.
-						case next of
-							Nothing = return (prev ++ token)
-							_		= readTokens (prev ++ token)
+						case token of
+							(Token EOFToken _ _)	= return (prev ++ [token])
+							_						= readTokens (prev ++ [token])
 				
 
 readToken :: Scanner Token
@@ -23,7 +22,7 @@ readToken =
 	getPos 	>>= \pos.
 		case char of
 			/** We have hit the end **/
-			Nothing	= logHere FATAL "readToken called while buffer was empty"
+			Nothing	= return (Token EOFToken "" pos)
 			Just c =
 				case c of
 					/** All bracket types **/
@@ -46,12 +45,12 @@ readToken =
 					'%' = return (Token Operator "%" pos)
 					
 					/** Complex cases **/
-					':' = branch1
-					'-' = branch2
-					'>' = branch3
-					'<' = branch4
-					'&' = branch5
-					'|' = branch6
+					':' = branch1 pos
+					'-' = branch2 pos
+					'>' = branch3 pos
+					'<' = branch4 pos
+					'&' = branch5 pos
+					'|' = branch6 pos
 					
 					/** Strings and integers **/
 					_ 	= 	if (isDigit c) (readInteger (toString c) pos) (
@@ -66,58 +65,61 @@ readToken =
 
 /** Difference between type indicators and array concatenation **/					 
 branch1 :: Position -> Scanner Token
-branch1 pos = peek >>= \next.
+branch1 pos = peek >>= qwe
+where
+	qwe :: ((Maybe Char) -> Scanner Token)
+	qwe = \next.
 				case next of
-					Just ':' = read >>= return (Token TypeIndicator "::" pos)
+					Just ':' = read >>| return (Token TypeIndicator "::" pos)
 					_ = return (Token Operator ":" pos)
 					
 /** Difference between minus operator and type arrow **/
 branch2 :: Position -> Scanner Token
 branch2 pos = peek >>= \next.
 				case next of
-					Just '>' 	= read >>= return (Token TypeArrow "::" pos)
+					Just '>' 	= read >>| return (Token TypeArrow "::" pos)
 					_ 			=  return (Token Operator "-" pos)
 					
 /** Difference between > and >= **/
 branch3 :: Position -> Scanner Token
 branch3 pos = peek >>= \next.
 				case next of
-					Just '=' 	= read >>= return (Token Operator ">=" pos)
+					Just '=' 	= read >>| return (Token Operator ">=" pos)
 					_ 			=  return (Token Operator ">" pos)
 					
 /** Difference between < and <= **/
 branch4 :: Position -> Scanner Token
 branch4 pos = peek >>= \next.
 				case next of
-					Just '=' 	= read >>= return (Token Operator "<=" pos)
+					Just '=' 	= read >>| return (Token Operator "<=" pos)
 					_ 			=  return (Token Operator "<" pos)
 					
 /** Reading && **/
-branch5 :: Char TokenType Position -> Scanner Token
+branch5 :: Position -> Scanner Token
 branch5 pos = peek >>= \next.
 				case next of
-					Just '&' 	= read >>= return (Token Operator "&&" pos)
+					Just '&' 	= read >>| return (Token Operator "&&" pos)
 					_ 			=  return (Token Unscannable "&" pos)
 					
 /** Reading || **/
-branch6 :: Char TokenType Position -> Scanner Token
+branch6 :: Position -> Scanner Token
 branch6 pos = peek >>= \next.
 				case next of
-					Just '|' 	= read >>= return (Token Operator "||" pos)
+					Just '|' 	= read >>| return (Token Operator "||" pos)
 					_ 			=  return (Token Unscannable "|" pos)
 				
 /** Read a string of numerical chars **/
 readInteger :: String Position -> Scanner Token
 readInteger p pos = peek >>= \next.
 				case next of
-					Just n 		= if(isDigit x) (read >>= readInteger (p +++ (toString n)) pos) (return (Token NumToken p pos))
+					Just n 		= if(isDigit n) (read >>| readInteger (p +++ (toString n)) pos) (return (Token NumToken p pos))
 					_		 	= return (Token NumToken p pos)
 					
 /** Read a string of alphanumerical chars, is only called when a character is found **/
 readString :: String Position -> Scanner Token
 readString p pos = peek >>= \next.
 				case next of
-					Just n 		= if(isAlphanum x) (read >>= readString (p +++ (toString n)) pos) (return (Token StringToken p pos))
+					Just n 		= if(isAlphanum n) (read >>| readString (p +++ (toString n)) pos) (return (Token StringToken p pos))
 					_ 			= return (Token StringToken p pos)
 
 Start = readToken

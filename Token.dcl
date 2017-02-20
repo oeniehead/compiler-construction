@@ -15,6 +15,7 @@ from Misc import :: Position
 	| Comma
 	| TypeIndicator
 	| TypeArrow
+	| EOFToken
 	| Unscannable // if the scanning has failed, but the scanner is able to recover
 
 :: BraceType	= Open  | Close

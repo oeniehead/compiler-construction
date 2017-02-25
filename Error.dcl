@@ -1,8 +1,9 @@
 definition module Error
 
-from Misc import :: Position
-
+//from Misc import :: Position
+import GenString
 import Misc
+import CustomStdEnv
 
 :: Error = Error Position Severity String
 
@@ -13,3 +14,8 @@ import Misc
 	| INFO
 	| DEBUG
 	| TRACE
+
+derive gString Severity, Error
+
+instance toString Error
+instance toString Severity

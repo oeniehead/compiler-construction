@@ -14,9 +14,9 @@ gString{|UNIT|}			UNIT				= ""
 gString{|PAIR|}			fx fy (PAIR x y)	= (fx x) +++ " " +++ (fy y)
 gString{|EITHER|}		fl fr (LEFT l) 		= fl l
 gString{|EITHER|}		fl fr (RIGHT r) 	= fr r
-gString{|CONS of c|}	f     (CONS x) 		= "(" +++ c.gcd_name
-												+++ (if (c.gcd_arity == 0) "" " ")
-												+++ (f x) +++ ")"
+gString{|CONS of c|}	f     (CONS x) 		= if (c.gcd_arity == 0)
+												c.gcd_name
+												("(" +++ c.gcd_name +++ " " +++ (f x) +++ ")")
 gString{|RECORD|}		f     (RECORD x)  	= "{" +++ (f x) +++ "}"
 gString{|FIELD of c|}	f     (FIELD x)		= (if (c.gfd_index == 0) "" ",") // start with comma if this is not the first field
 												+++ c.gfd_name +++ "=" +++ (f x)

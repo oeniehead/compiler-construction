@@ -1,6 +1,8 @@
 definition module Token
 
 from Misc import :: Position
+import GenString
+import CustomStdEnv
 
 :: Token = Token TokenType String Position
 
@@ -22,5 +24,9 @@ from Misc import :: Position
 :: BraceType	= Open  | Close
 :: BraceStyle	= Curly | Round | Square
 
+derive gString Token, TokenType, BraceType, BraceStyle
 
-
+instance toString Token
+instance toString TokenType
+instance toString BraceType
+instance toString BraceStyle

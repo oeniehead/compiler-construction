@@ -24,11 +24,12 @@ getArgs = fmap (drop 1) getCl
 main :: IO ()
 main = getArgs									>>= \args.
 //	let file = hd args in
-	let file = "empty" in
+	let file = "test" in
 	putStrLn ("file name: {" +++ file +++ "}")	>>|
 	readFileM file								>>= \string.
 	putStrLn ("contents: {" +++ string +++ "}")	>>|
 	let (tokens, errors) = scan string in
+	printL tokens								>>|
 	printL errors
 
 scan :: !String -> !(![Token], ![Error])
@@ -38,4 +39,6 @@ printL :: [a] -> IO () | toString a
 printL [a:as] = print a >>| (printL as)
 printL []	  = return ()
 
-Start w = execIO main w
+//Start w = execIO main w
+
+Start = scanner "c"

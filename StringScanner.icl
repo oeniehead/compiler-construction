@@ -82,7 +82,6 @@ runScanner initStr (Scanner scan)
 = (a, st.log)
 
 
+//Start = runScanner "c" read//Just c
 
-
-
-Start = 0
+//Start = runScanner "" read//Nothing

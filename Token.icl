@@ -15,4 +15,4 @@ instance toString BraceType		where toString x = gString{|*|} x
 instance toString BraceStyle	where toString x = gString{|*|} x
 
 
-Start = 0
+//Start = 0

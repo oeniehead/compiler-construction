@@ -30,3 +30,7 @@ instance toString Token
 instance toString TokenType
 instance toString BraceType
 instance toString BraceStyle
+
+instance == TokenType
+instance == BraceType
+instance == BraceStyle

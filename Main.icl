@@ -11,6 +11,7 @@ import CustomStdEnv
 
 
 import Scanner
+import SPLParser
 import Error
 import Misc
 
@@ -40,5 +41,3 @@ printL [a:as] = print a >>| (printL as)
 printL []	  = return ()
 
 //Start w = execIO main w
-
-Start = scanner "c"

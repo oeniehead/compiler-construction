@@ -212,3 +212,5 @@ scan15 = read >>= \(Just c). if (c == 'c')
 scan16 = read >>= \(Just c). if (not (c == 'c'))
 			(return "finish")
 			(read >>| scan15)
+			
+Start = scanner "Fred123.hd.tl.snd.snd.fst"

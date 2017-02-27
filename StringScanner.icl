@@ -50,8 +50,8 @@ read = Scanner scan
 where
 	scan st = if (st.buffer == "")
 		(Nothing, st)
-		(let (char, tail) = uselect st.buffer 0
-		 in (Just char, {st & buffer = tail
+		(let char = select st.buffer 0
+		 in (Just char, {st & buffer = st.buffer % (1, size st.buffer)
 							, pos    = nextPos st.pos char})
 		)
 

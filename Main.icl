@@ -11,7 +11,7 @@ import CustomStdEnv
 
 
 import Scanner
-import SPLParser
+//import SPLParser
 import Error
 import Misc
 
@@ -23,21 +23,18 @@ getArgs :: IO [String]
 getArgs = fmap (drop 1) getCl
 
 main :: IO ()
-main = getArgs									>>= \args.
-//	let file = hd args in
-	let file = "test" in
-	putStrLn ("file name: {" +++ file +++ "}")	>>|
-	readFileM file								>>= \string.
-	putStrLn ("contents: {" +++ string +++ "}")	>>|
-	let (tokens, errors) = scan string in
-	printL tokens								>>|
-	printL errors
-
-scan :: !String -> !(![Token], ![Error])
-scan s = scanner s
+main = getArgs										>>= \args.
+	let file = hd args in
+	readFileM file									>>= \string.
+	putStrLn ("contents: \"" +++ string +++ "\"")	>>|
+	let (tokens, errors) = scanner string in
+	putStrLn "Errors:"								>>|
+	printL errors									>>|
+	putStrLn "Tokens:"								>>|
+	printL tokens
 
 printL :: [a] -> IO () | toString a
 printL [a:as] = print a >>| (printL as)
 printL []	  = return ()
 
-//Start w = execIO main w
+Start w = execIO main w

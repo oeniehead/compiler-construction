@@ -16,4 +16,5 @@ Pretty printing
 - readString is recursief gedefinieerd. Om de een of andere reden raakt hij in een oneindige recursie als je hem uitvoert. ik heb de indruk dat ie hem wilt uitschrijven, waarom weet ik ook niet.
 
 # Notes/niet vergeten
+- Warning of error als EOF voordat een multiline comment is geeindigd?
 - Control en data worden uit iTasks SDK gehaald, verwijderen uit project

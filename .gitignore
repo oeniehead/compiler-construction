@@ -1,5 +1,6 @@
 *.prj
 *.prp
 *.exe
+*.log
 Clean System Files
 sapl

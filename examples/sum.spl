@@ -1,0 +1,29 @@
+sum(l) :: [Int] -> Int {
+	if (!isEmpty(l.tl)) {
+		return l.hd + sum(l.tl);
+	}
+	return l.hd;
+}
+
+sum1(l) :: [Int] -> Int {
+	if (isEmpty(l.tl)) {
+		return l.hd;
+	}
+	return l.hd + sum(l.tl);
+}
+
+sum2(l) :: [Int] -> Int {
+	if (isEmpty(l.tl)) {
+		return l.hd;
+	} else {
+		return l.hd + sum(l.tl);
+	}
+}
+
+main() :: -> Void
+{
+	print (sum([1:2:3:[]]));
+	print (sum1([1:2:3:[]]));
+	print (sum2([1:2:3:[]]));
+	return;
+}

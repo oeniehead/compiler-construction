@@ -1,0 +1,8 @@
+xor(a, b) :: Bool Bool -> Bool {
+	return (a || b) && !(a && b);
+}
+
+implies(a, b) Bool Bool -> Bool {
+	if (!a) {return True;}
+	else {return b;}
+}

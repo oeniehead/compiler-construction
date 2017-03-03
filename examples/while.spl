@@ -1,0 +1,9 @@
+keepGoingI (n) :: Int -> Void {
+	while (True) {
+		n = n + 1;
+	}
+}
+
+keepGoingR (n) :: Int -> Void {
+	return keepGoingR (n + 1);
+}

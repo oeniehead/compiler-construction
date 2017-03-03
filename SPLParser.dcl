@@ -14,21 +14,22 @@ import Misc
 	| Fun AST_Fun
 // VarDecl
 :: AST_Var
-	= Var_Gen AST_Ident AST_Exp 			// 'var' type
-	| Var_Type AST_Type AST_Ident AST_Exp 	// typed variable
+	= Var_Gen AST_Id AST_Exp 			// 'var' type
+	| Var_Type AST_Type AST_Id AST_Exp 	// typed variable
 // FunDecl
 :: AST_Fun
-	= Fun_Gen AST_Ident [AST_Ident] [AST_Var] [AST_Stmt]				// generic function
-	| Fun_Type AST_Ident [AST_Ident] AST_FunType [AST_Var] [AST_Stmt]	// typed function (with :: a -> b)
+	= Fun_Gen AST_Id [AST_Id] [AST_Var] [AST_Stmt]				// generic function
+	| Fun_Type AST_Id [AST_Id] AST_FunType [AST_Var] [AST_Stmt]	// typed function (with :: a -> b)
 // FunType
 :: AST_FunType
 	= FunType [AST_Type] AST_Type
+	| FunTypeVoid [AST_Type]
 // Type
 :: AST_Type
 	= TypeBasic AST_BasicType
 	| TypeTuple AST_Type AST_Type
 	| TypeArray [AST_Type]
-	| TypeIdent AST_Ident
+	| TypeIdent AST_Id
 // Basic types
 :: AST_BasicType
 	= IntType
@@ -36,10 +37,11 @@ import Misc
 	| CharType
 // Stmt
 :: AST_Stmt
-	= StmtIf AST_Exp AST_Stmt AST_Stmt
-	| StmtWhile AST_Exp AST_Stmt
-	| StmtAss AST_Id AST_Exp
-	| StmtFun
+	= StmtIf AST_Exp [AST_Stmt]
+	| StmtIfElse AST_Exp [AST_Stmt] [AST_Stmt]
+	| StmtWhile AST_Exp [AST_Stmt]
+	| StmtAss AST_Ident AST_Exp
+	| StmtFun AST_FunCall
 	| StmtRet AST_Exp
 	| StmtRetV
 // Exp

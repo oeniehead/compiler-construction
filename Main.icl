@@ -27,6 +27,7 @@ main = getArgs										>>= \args.
 	let file = hd args in
 	readFileM file									>>= \string.
 	putStrLn ("contents: \"" +++ string +++ "\"")	>>|
+	putStrLn "scanning..."							>>|
 	let (tokens, errors) = scanner string in
 	putStrLn "Errors:"								>>|
 	printL errors									>>|

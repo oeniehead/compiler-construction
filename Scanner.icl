@@ -27,7 +27,7 @@ readToken =
 				case c of
 					/** All bracket types **/
 					'{'	= return (Token (Brace Open Curly) ("{") pos)
-					'}'	= return (Token (Brace Open Curly) ("}") pos)
+					'}'	= return (Token (Brace Close Curly) ("}") pos)
 					'('	= return (Token (Brace Open Round) ("(") pos)
 					')'	= return (Token (Brace Close Round) (")") pos)
 					'['	= return (Token (Brace Open Square) ("[") pos)
@@ -52,6 +52,8 @@ readToken =
 					'&' = branch5 pos
 					'|' = branch6 pos
 					'/' = branchFwdSlash pos
+					'=' = branchEq pos
+					'!' = branchExcl pos
 					
 					/** Strings and integers **/
 					_ 	= 	if (isDigit c) (readInteger (toString c) pos) (
@@ -60,6 +62,7 @@ readToken =
 							/** Skip space **/
 							if (isSpace c) (readToken) (
 										/** We have found garbage **/
+										(log (Error pos ERROR ("Illegal character '" +++ (toString c) +++ "'"))) >>|
 										(return (Token Unscannable (toString c) pos))
 							)))	
 					
@@ -74,11 +77,11 @@ where
 					Just ':' = read >>| return (Token TypeIndicator "::" pos)
 					_ = return (Token Operator ":" pos)
 					
-/** Difference between minus operator and type arrow **/
+/** Difference between minus token and type arrow**/
 branch2 :: Position -> Scanner Token
 branch2 pos = peek >>= \next.
 				case next of
-					Just '>' 	= read >>| return (Token TypeArrow "::" pos)
+					Just '>' 	= read >>| return (Token TypeArrow "->" pos)
 					_ 			=  return (Token Operator "-" pos)
 					
 /** Difference between > and >= **/
@@ -100,14 +103,14 @@ branch5 :: Position -> Scanner Token
 branch5 pos = peek >>= \next.
 				case next of
 					Just '&' 	= read >>| return (Token Operator "&&" pos)
-					_ 			=  return (Token Unscannable "&" pos)
+					_ 			= log (Error pos ERROR "Illegal token '&'") >>| return (Token Unscannable "&" pos)
 					
 /** Reading || **/
 branch6 :: Position -> Scanner Token
 branch6 pos = peek >>= \next.
 				case next of
 					Just '|' 	= read >>| return (Token Operator "||" pos)
-					_ 			=  return (Token Unscannable "|" pos)
+					_ 			= log (Error pos ERROR "Illegal token '|'") >>| return (Token Unscannable "|" pos)
 
 /** Difference between / and the two comment types */
 branchFwdSlash :: Position -> Scanner Token
@@ -136,6 +139,18 @@ where
 				Just '*'	= readedStar
 				Nothing		= logHere WARN "Last multiline comment has no *\\ terminator"
 
+branchEq :: Position -> Scanner Token
+branchEq pos = peek >>= \c.
+	case c of
+		Just '='	= read >>| return (Token Operator "==" pos)
+		_			= return (Token Assignment "=" pos)
+
+branchExcl :: Position -> Scanner Token
+branchExcl pos = peek >>= \c.
+	case c of
+		Just '='	= read >>| return (Token Operator "!=" pos)
+		_			= return (Token Operator "!" pos)
+
 /** Read a string of numerical chars **/
 readInteger :: String Position -> Scanner Token
 readInteger p pos = peek >>= \next.
@@ -147,7 +162,7 @@ readInteger p pos = peek >>= \next.
 readString :: String Position -> Scanner Token
 readString p pos = peek >>= \next.
 				case next of
-					Just n 		= if(isAlphanum n) (read >>| readString (p +++ (toString n)) pos) (return (Token StringToken p pos))
+					Just n 		= if(isAlphanum n || n == '_') (read >>| readString (p +++ (toString n)) pos) (return (Token StringToken p pos))
 					_ 			= return (Token StringToken p pos)
 
 //Start = runScanner "" scan
@@ -164,6 +179,7 @@ scan1 = readToken//should be Unscannable
 		
 //Start = scanner "Fred123.hd.tl.snd.snd.fst"
 
-/*Start = scanner ("aaa //comment \n"
-			 +++ "bbb /*mulitiline \n"
-			 +++ "comment*/ ccc /* falling off")*/
+//Start = scanner string1
+string1 = ("aaa //comment \n"
+	   +++ "bbb /*mulitiline \n"
+	   +++ "comment*/ ccc /* falling off")

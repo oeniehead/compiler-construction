@@ -1,6 +1,6 @@
-implementation module Text.Parsers.Simple.Core
+implementation module Simple.Core
 
-// Parser from the iTasks SDK library
+// Based on Text.Parsers.Simple.Core from the iTasks SDK library
 
 import Control.Applicative
 import Control.Monad

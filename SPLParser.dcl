@@ -1,10 +1,9 @@
 definition module SPLParser
 
-import Text.Parsers.Simple.Core
 import Token
 import Misc
 
-//parser :: [Token] -> ([(AST, [Token])], [Error])
+parser :: [Token] -> ([(AST, [Token])], [String])
 
 // SPL
 :: AST :== [AST_Dec]

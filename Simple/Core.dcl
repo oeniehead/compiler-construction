@@ -1,6 +1,6 @@
-definition module Text.Parsers.Simple.Core
+definition module Simple.Core
 
-// Parser from the iTasks SDK library
+// Based on Text.Parsers.Simple.Core from the iTasks SDK library
 
 from Control.Applicative import class Applicative (..), class Alternative (..), *>, <*
 from Control.Monad import class Monad (..), class MonadPlus (..)

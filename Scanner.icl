@@ -62,7 +62,7 @@ readToken =
 							/** Skip space **/
 							if (isSpace c) (readToken) (
 										/** We have found garbage **/
-										(log (Error pos ERROR ("Illegal character '" +++ (toString c) +++ "'"))) >>|
+										(log pos ERROR ("Illegal character '" +++ (toString c) +++ "'")) >>|
 										(return (Token Unscannable (toString c) pos))
 							)))	
 					
@@ -103,14 +103,14 @@ branch5 :: Position -> Scanner Token
 branch5 pos = peek >>= \next.
 				case next of
 					Just '&' 	= read >>| return (Token Operator "&&" pos)
-					_ 			= log (Error pos ERROR "Illegal token '&'") >>| return (Token Unscannable "&" pos)
+					_ 			= log pos ERROR "Illegal token '&'" >>| return (Token Unscannable "&" pos)
 					
 /** Reading || **/
 branch6 :: Position -> Scanner Token
 branch6 pos = peek >>= \next.
 				case next of
 					Just '|' 	= read >>| return (Token Operator "||" pos)
-					_ 			= log (Error pos ERROR "Illegal token '|'") >>| return (Token Unscannable "|" pos)
+					_ 			= log pos ERROR "Illegal token '|'" >>| return (Token Unscannable "|" pos)
 
 /** Difference between / and the two comment types */
 branchFwdSlash :: Position -> Scanner Token

@@ -11,7 +11,7 @@ import CustomStdEnv
 
 
 import Scanner
-//import SPLParser
+import SPLParser
 import Error
 import Misc
 
@@ -23,19 +23,33 @@ getArgs :: IO [String]
 getArgs = fmap (drop 1) getCl
 
 main :: IO ()
-main = getArgs										>>= \args.
+main =
+	print "=========================="			>>|
+	getArgs										>>= \args.
 	let file = hd args in
-	readFileM file									>>= \string.
-	putStrLn ("contents: \"" +++ string +++ "\"")	>>|
-	putStrLn "scanning..."							>>|
-	let (tokens, errors) = scanner string in
-	putStrLn "Errors:"								>>|
-	printL errors									>>|
-	putStrLn "Tokens:"								>>|
-	printL tokens
+	readFileM file								>>= \string.
+	print ("contents: \"" +++ string +++ "\"")	>>|
+//	print "scanning..."							>>|
+	let (tokens, sErrors) = scanner string in
+	(if (not (isEmpty sErrors))
+		(	print "Scanner errors:")
+		(	return ())
+	)											>>|
+	printAll sErrors							>>|
+//	print "Tokens:"								>>|
+//	printAll tokens								>>|
+//	print "Parsing..."							>>|
+	let (syntaxTrees, pErrors) = parser tokens in
+	(if (not (isEmpty pErrors))
+		(	print "Parser Errors:")
+		(	return ())
+	)											>>|
+	printAll pErrors							>>|
+	print ("Nr of derivations: " +++ (toString (length syntaxTrees)))
+	
 
-printL :: [a] -> IO () | toString a
-printL [a:as] = print a >>| (printL as)
-printL []	  = return ()
+printAll :: [a] -> IO () | toString a
+printAll [a:as] = print a >>| (printAll as)
+printAll []	  = return ()
 
 Start w = execIO main w

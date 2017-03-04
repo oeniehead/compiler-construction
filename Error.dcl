@@ -5,7 +5,12 @@ import GenString
 import Misc
 import CustomStdEnv
 
-:: Error = Error Position Severity String
+:: Error =
+	{ pos		:: Position
+	, severity	:: Severity
+	, stage		:: Stage
+	, message	:: String
+	}
 
 :: Severity
 	= FATAL
@@ -15,7 +20,12 @@ import CustomStdEnv
 	| DEBUG
 	| TRACE
 
-derive gString Severity, Error
+:: Stage
+	= Scanning
+	| Parsing
+	| TypeChecker
+	// etc.
 
-instance toString Error
-instance toString Severity
+derive gString Stage, Severity
+
+instance toString Error, Stage, Severity

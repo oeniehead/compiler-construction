@@ -10,7 +10,7 @@ import Misc
 
 :: Scanner a = Scanner (ScannerState -> (a, ScannerState))
 :: ScannerState =	{ buffer	:: String
-					, pos		:: Position
+					, sPos		:: Position
 //					, tokens	:: [Token] 
 					, log		:: [Error]}
 
@@ -52,7 +52,7 @@ where
 		(Nothing, st)
 		(let char = select st.buffer 0
 		 in (Just char, {st & buffer = st.buffer % (1, size st.buffer)
-							, pos    = nextPos st.pos char})
+							, sPos    = nextPos st.sPos char})
 		)
 
 peek	:: Scanner (Maybe Char)
@@ -63,19 +63,25 @@ where
 		(Just (select st.buffer 0), st)
 
 getPos  :: Scanner Position
-getPos = Scanner \st -> (st.pos, st)
+getPos = Scanner \st -> (st.sPos, st)
 
-log		:: Error			-> Scanner ()
-log e = Scanner \st -> ((), {st & log = [e: st.log]})
+log		:: Position Severity String	-> Scanner ()
+log pos sev msg = Scanner \st -> ((), {st & log = [error: st.log]})
+where error =
+		{ pos		= pos
+		, stage		= Scanning
+		, severity	= sev
+		, message	= msg
+		}
 
-logHere :: Severity String	-> Scanner ()
-logHere sev str = getPos >>= \pos -> log (Error pos sev str)
+logHere :: Severity String -> Scanner ()
+logHere sev str = getPos >>= \pos -> log pos sev str
 
 runScanner :: String (Scanner a) -> (a, [Error])
 runScanner initStr (Scanner scan)
 # startState =
 	{ buffer	= initStr
-	, pos		= zero
+	, sPos		= zero
 	, log		= []
 	}
 # (a, st) = scan startState

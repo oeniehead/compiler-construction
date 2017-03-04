@@ -1,8 +1,9 @@
 implementation module SPLParser
 
-import Text.Parsers.Simple.Core
+import Simple.Core
 import Token
 import Misc
+//import Error
 
 import Control.Applicative
 import Control.Monad
@@ -20,12 +21,13 @@ pSatisfyBrace btype bstyle = pSatisfy (\(Token type _ _) =
 						_	= False)
 
 
-//parser :: [Token] -> ([(AST, [Token])], [Error])
-//parser tokens = runParser parseSPL tokens
+parser :: [Token] -> ([(AST, [Token])], [String])
+parser tokens = runParser parseAST tokens
 
 parse2op :: [Token] -> ([(AST_Exp, [Token])], [Error])
 parse2op tokens = runParser parseAST_Exp_Int tokens
 
+/*
 expTokens :: [Token]
 expTokens =  [
 		(Token NumToken "1" zero),
@@ -54,7 +56,7 @@ expIdent = [
 
 
 
-Start = runParser parseAST_Ident expIdent
+Start = runParser parseAST_Ident expIdent*/
 
 parseAST :: Parser Token AST
 parseAST = pMany parseAST_Dec

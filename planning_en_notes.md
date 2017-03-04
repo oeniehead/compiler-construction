@@ -1,6 +1,7 @@
 # To do
 Parsing testen
 Pretty printing
+Error messages parser?
 
 #Done
 Scanner moet comments negeren

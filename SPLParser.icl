@@ -24,8 +24,8 @@ pSatisfyBrace btype bstyle = pSatisfy (\(Token type _ _) =
 parser :: [Token] -> ([(AST, [Token])], [String])
 parser tokens = runParser parseAST tokens
 
-parse2op :: [Token] -> ([(Expr, [Token])], [Error])
-parse2op tokens = runParser parseAST_Exp_Int tokens
+//parse2op :: [Token] -> ([(Expr, [Token])], [Error])
+//parse2op tokens = runParser parseAST_Exp_Int tokens
 
 /*
 expTokens :: [Token]
@@ -77,7 +77,7 @@ parseVarDecl = (
 					>>= \e. pSatisfyTokenType TerminatorToken
 					>>| pYield (VarUntyped i e)
 				) <<|> (
-						parseAST_Type
+						parseType
 					>>= \t.parseId
 					>>= \i. pSatisfyTokenType Assignment
 					>>| parseAST_Exp
@@ -92,19 +92,19 @@ parseFunDecl = parseId
 				>>= \a. ((
 							pSatisfyTokenType TypeIndicator
 						>>| parseFunType
-						>>= \t. parseAST_Block
+						>>= \t. parseFunBody
 											// Id Args Type Vars Stmts
 						>>= \(v, s). pYield (FunTyped i a t v s)
 					) <<|> (
-							parseAST_Block
+							parseFunBody
 											// Id Args Vars Stmts
 						>>= \(v, s). pYield (FunUntyped i a v s)
 				)) 
 				
-parseAST_Block :: Parser Token ([VarDecl], [Stmt])
-parseAST_Block = 	pSatisfyBrace Open Curly
+parseFunBody :: Parser Token ([VarDecl], [Stmt])
+parseFunBody = 	pSatisfyBrace Open Curly
 				>>| pMany parseVarDecl
-				>>= \v. pSome parseAST_Stmt
+				>>= \v. pSome parseStmt
 				>>= \s. pYield (v, s)
 				
 parseIds :: Parser Token [Id]
@@ -119,28 +119,28 @@ parseIds = (
 				)
 
 parseFunType :: Parser Token FunType
-parseFunType = pMany parseAST_Type
+parseFunType = pMany parseType
 				>>= \t. pSatisfyTokenType TypeArrow
 				>>| ((
 						pSatisfyTokenTypeString StringToken ["Void"]
 					>>| pYield (FunTypeVoid t)) <<|> (
-						parseAST_Type
+						parseType
 					>>= \r. pYield (FunType t r))
 				)
 
-parseAST_Type :: Parser Token Type
-parseAST_Type = parseAST_BasicType >>= \t. pYield (TypeBasic t) <<|>
+parseType :: Parser Token Type
+parseType = parseBasicType >>= \t. pYield (TypeBasic t) <<|>
 				(
 						pSatisfyBrace Open Round
-					>>| parseAST_Type
+					>>| parseType
 					>>= \a. pSatisfyTokenType Comma
-					>>| parseAST_Type
+					>>| parseType
 					>>= \b. pSatisfyBrace Close Round
 					>>| pYield (TypeTuple a b)
 				) <<|>
 				(
 						pSatisfyBrace Open Square
-					>>| pMany parseAST_Type
+					>>| pMany parseType
 					>>= \a. pSatisfyBrace Close Square
 					>>| pYield (TypeArray a)
 				) <<|>
@@ -149,59 +149,59 @@ parseAST_Type = parseAST_BasicType >>= \t. pYield (TypeBasic t) <<|>
 					>>= \i. pYield (TypeIdent i)
 				) 
 
-parseAST_BasicType :: Parser Token BasicType
-parseAST_BasicType = (pSatisfyTokenTypeString StringToken ["Int"] >>| pYield (IntType)) <<|>
+parseBasicType :: Parser Token BasicType
+parseBasicType = (pSatisfyTokenTypeString StringToken ["Int"] >>| pYield (IntType)) <<|>
 					(pSatisfyTokenTypeString StringToken ["Bool"] >>| pYield (BoolType)) <<|>
 					(pSatisfyTokenTypeString StringToken ["Char"] >>| pYield (CharType))
 
-parseAST_Stmt :: Parser Token Stmt
-parseAST_Stmt = parseAST_Stmt_If <<|>
-				parseAST_Stmt_While <<|>
-				parseAST_Stmt_Ass <<|>
-				parseAST_Stmt_Ret
+parseStmt :: Parser Token Stmt
+parseStmt = parseStmtIf <<|>
+				parseStmtWhile <<|>
+				parseStmtAss <<|> // TODO: Maar 4 statements hier?!
+				parseStmtReturn
 				
-parseAST_Stmt_If :: Parser Token Stmt
-parseAST_Stmt_If = pSatisfyTokenTypeString StringToken ["if"]
+parseStmtIf :: Parser Token Stmt
+parseStmtIf = pSatisfyTokenTypeString StringToken ["if"]
 			>>| pSatisfyBrace Open Round
 			>>| parseAST_Exp
 			>>= \c. pSatisfyBrace Close Round
 			>>| pSatisfyBrace Open Curly
-			>>| pMany parseAST_Stmt
+			>>| pMany parseStmt
 			>>= \a. pSatisfyBrace Close Curly
 			>>| ((
 					pSatisfyTokenTypeString StringToken ["else"]
 				>>| pSatisfyBrace Open Curly
-				>>| pMany parseAST_Stmt
+				>>| pMany parseStmt
 				>>= \b. pSatisfyBrace Close Curly
 				>>| pYield (StmtIfElse c a b)) <<|> (
 					pYield (StmtIf c a)
 				)
 			)
 			
-parseAST_Stmt_While :: Parser Token Stmt
-parseAST_Stmt_While =  pSatisfyTokenTypeString StringToken ["while"]
+parseStmtWhile :: Parser Token Stmt
+parseStmtWhile =  pSatisfyTokenTypeString StringToken ["while"]
 			>>| pSatisfyBrace Open Round
 			>>| parseAST_Exp
 			>>= \c. pSatisfyBrace Close Round
 			>>| pSatisfyBrace Open Curly
-			>>| pMany parseAST_Stmt
+			>>| pMany parseStmt
 			>>= \a. pSatisfyBrace Close Curly
 			>>| pYield (StmtWhile c a)
 			
-parseAST_Stmt_Ass :: Parser Token Stmt
-parseAST_Stmt_Ass = parseIdent
+parseStmtAss :: Parser Token Stmt
+parseStmtAss = parseIdent
 				>>= \i. pSatisfyTokenTypeString Operator ["="]
 				>>| parseAST_Exp
 				>>= \e. pSatisfyTokenType TerminatorToken
 				>>| pYield (StmtAss i e)
 				
-parseAST_Stmt_Fun :: Parser Token Stmt
-parseAST_Stmt_Fun = parseFunDeclCall
+parseStmtFun :: Parser Token Stmt
+parseStmtFun = parseFunCall
 				>>= \f. pSatisfyTokenType TerminatorToken
 				>>| pYield (StmtFun f)
 				
-parseAST_Stmt_Ret :: Parser Token Stmt
-parseAST_Stmt_Ret = pSatisfyTokenTypeString StringToken ["return"]
+parseStmtReturn :: Parser Token Stmt
+parseStmtReturn = pSatisfyTokenTypeString StringToken ["return"]
 				>>| ((
 						parseAST_Exp
 					>>= \e. pSatisfyTokenType TerminatorToken
@@ -210,8 +210,8 @@ parseAST_Stmt_Ret = pSatisfyTokenTypeString StringToken ["return"]
 					)
 				)				
 
-parseFunDeclCall :: Parser Token FunCall
-parseFunDeclCall = pSatisfyTokenType StringToken
+parseFunCall :: Parser Token FunCall
+parseFunCall = pSatisfyTokenType StringToken
 			>>= \(Token StringToken name _). pSatisfyBrace Open Round
 			>>| pMany parseAST_Exp
 			>>= \args. pSatisfyBrace Close Round
@@ -221,6 +221,51 @@ parseFunDeclCall = pSatisfyTokenType StringToken
 	Dit blok parseert alle expressies. Eerst worden de binaire operatoren geprobeerd,
 	daarna de unaire operatoren, en daarna wordt er teruggevallen op de overige expressies.
 */
+
+/*
+Operators in increasing binding power: (oud)
+Op1  ::=  ||
+Op2  ::=  &&
+Op3  ::=  == | < | > | <= | >= | !=
+Op4  ::=  * | / | %
+Op5  ::=  :
+OpUn ::=  ! | -
+
+Adjusted grammar: (oud)
+Exp  ::= Exp1
+Exp1 ::= Exp2  [Op1 Exp1]
+Exp2 ::= Exp3  [Op2 Exp2]
+Exp3 ::= Exp4  [Op3 Exp3]
+Exp4 ::= Exp5  [Op4 Exp4]
+Exp5 ::= ExpUn [Op5 Exp5]
+ExpUn ::= [Op1] ExpAtom
+ExpAtom = ExpIdent  | ExpInt     | ExpChar | ExpBool
+        | ExpNested | ExpFunCall | Array   | Tuple
+
+Operators in increasing binding power:
+Op1  r ::=   ||
+Op2  ::=  &&
+Op3  ::=  == | < | > | <= | >= | !=
+Op4  ::=  + | -
+Op5  ::=  * | / | %
+Op6  ::=  :
+OpUn ::=  ! | -
+r and l mean right resp. left associative
+3 different - : binary, unary and part of int
+
+Adjusted grammar:
+Exp   ::= Exp1
+Exp1  ::= Exp2  [Op1 Exp1]
+Exp2  ::= Exp3  [Op2 Exp2]
+Exp3  ::= Exp4  [Op3 Exp3]
+Exp4  ::= Exp5  [Op4 Exp4]
+Exp5  ::= ExpUn [Op5 Exp5]
+ExpUn ::= [Op1] ExpAtom
+ExpAtom = ExpIdent  | ExpInt     | ExpChar | ExpBool
+        | ExpNested | ExpFunCall | Array   | Tuple
+
+*/
+
 parseAST_Exp :: Parser Token Expr
 parseAST_Exp = parseAST_Exp1
 
@@ -350,12 +395,12 @@ parseAST_Op1 = pSatisfyTokenTypeString Operator ["!", "-"]
 
 parseIdent :: Parser Token IdWithFields
 parseIdent = parseId 
-			>>= \ast_id. pMany parseAST_Field
+			>>= \ast_id. pMany parseField
 			>>= \ast_fields.
 				pYield (IdWithFields ast_id ast_fields)
 
-parseAST_Field :: Parser Token Field
-parseAST_Field = pSatisfyTokenType Dot
+parseField :: Parser Token Field
+parseField = pSatisfyTokenType Dot
 			>>| pSatisfyTokenTypeString StringToken ["hd", "tl", "fst", "snd"]
 			>>= (\(Token StringToken s _).
 				let t = case s of
@@ -377,7 +422,7 @@ parseAST_Exp_Ident = parseIdent
 			>>= (\ident. pYield (ExpIdent ident))
 
 parseAST_Exp_Int :: Parser Token Expr
-parseAST_Exp_Int = pSatisfyTokenType NumToken
+parseAST_Exp_Int = pSatisfyTokenType NumToken // parse -
 			>>= (\(Token NumToken s _). pYield (ExpInt (toInt s)))
 			
 parseAST_Exp_Char :: Parser Token Expr
@@ -398,7 +443,7 @@ parseAST_Exp_Nested = pSatisfyBrace Open Round
 			>>| pYield (ExpNested exp)
 			
 parseAST_Exp_FunCall :: Parser Token Expr
-parseAST_Exp_FunCall = parseFunDeclCall
+parseAST_Exp_FunCall = parseFunCall
 			>>= \funcall. pYield (ExpFunCall funcall)
 			
 parseAST_Exp_Array :: Parser Token Expr

@@ -70,7 +70,7 @@ parser :: [Token] -> ([(AST, [Token])], [Error])
 	| ExpInt Int
 	| ExpChar Char // Was ExpChar String
 	| ExpBool Bool
-	| ExpNested Expr // TODO: deze moet verwijderd worden
+//	| ExpNested Expr  Deze gaat heel vervelend worden bij dingen als typechecken en optimalisatie, dus heb ik verwijderd.
 	| ExpFunCall FunCall
 	| ExpEmptyArray
 	| ExpTuple Expr Expr

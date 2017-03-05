@@ -505,8 +505,7 @@ ExpUn ::= OpUn ExpUn | ExpAtom
 ExpAtom = ExpIdent  | ExpInt     | ExpChar 	     | ExpBool
         | ExpNested | ExpFunCall | ExpEmptyArray | ExpTuple
 
-We implemented all operators as left associative operators. The extra
-expressions in [(Op Exp)*] needs to be reversed after parsing.
+We implemented all operators as left associative operators.
 
 It could be that the logical operators are more efficient if they
 would be right associative. In other languages (C, Java and mathematics),
@@ -569,13 +568,12 @@ pLeftAssocOps parseItem parseOp =
 	parseItem	>>= \item.
 	pMany (	parseOp		>>= \op.
 			parseItem	>>= \item.
-			return (op,item)		) >>= \list. // In 1 - 2 - 3, '- 3' is pushed on the list at last
+			return (op,item)		) >>= \list.
 	return (makeExp item list)
 where
-	//makeExp 1 [(-,3),(-,2)] ==> (1 - 2) - 3
 	makeExp item []		= item
 	makeExp item [(op,i2):rest]
-						= ExpBinOp (makeExp item rest) op i2
+						= makeExp (ExpBinOp item op i2) rest
 
 parseExp :: Parser Token Expr
 parseExp = pExp1
@@ -591,10 +589,10 @@ pExpUn =
 	<<|>
 		(parseExpAtom)
 
-import Scanner
-Start = runParser (parseExp) tokens
-where
-	(tokens,_) = scanner "1 * 2-3--4" // WERKT NOG NIET
+//	import Scanner
+//	Start = runParser (parseExp) tokens
+//	where
+//		(tokens,_) = scanner "1-2-3"
 
 parseExpAtom :: Parser Token Expr
 parseExpAtom = 	parseExpIdent
@@ -631,7 +629,7 @@ parseExpNested :: Parser Token Expr
 parseExpNested = pSatisfyBrace Open Round
 			>>| parseExp
 			>>= \exp. pSatisfyBrace Close Round
-			>>| pYield (ExpNested exp)
+			>>| pYield exp
 			
 parseExpFunCall :: Parser Token Expr
 parseExpFunCall = parseFunCall

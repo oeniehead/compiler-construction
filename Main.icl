@@ -11,7 +11,7 @@ import CustomStdEnv
 
 
 import Scanner
-import SPLParserS
+import SPLParser
 import Error
 import Misc
 

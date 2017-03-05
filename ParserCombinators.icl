@@ -1,6 +1,6 @@
-implementation module Simple.Core
+implementation module ParserCombinators
 
-// Based on Text.Parsers.Simple.Core from the iTasks SDK library
+// Adjusted version of Text.Parsers.Simple.Core from the iTasks SDK library
 
 import Control.Applicative
 import Control.Monad
@@ -9,6 +9,7 @@ import Data.Func
 import Data.Functor
 import Data.List
 from StdFunc import o, const
+import Error
 
 :: PCont t a :== [t] -> ([(a, [t])], [Error])
 :: Parser t a = Parser (PCont t a)
@@ -36,7 +37,8 @@ parse p ts
   = case runParser p ts of
       (rs, []) -> case [r \\ (r, []) <- rs] of
                     [r : _] -> Right r
-                    _       -> Left ["No parse results with a fully consumed input."]
+                    _       -> Left [{pos=zero, severity = FATAL, stage = Parsing,
+                    				message="No parse results with a fully consumed input."}]
       (_, es)  -> Left es
 
 runParser :: (Parser t a) [t] -> ([(a, [t])], [Error])

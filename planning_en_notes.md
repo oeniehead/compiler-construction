@@ -21,6 +21,7 @@ Scanning testen
 # Notes/niet vergeten
 - Warning of error als EOF voordat een multiline comment is geeindigd?
 - Control en data worden uit iTasks SDK gehaald, verwijderen uit project
+- ExpNested verwijderen?a
 
 # Log
 02-03 11.30-13.00 Tom CL interfacing en comments negeren

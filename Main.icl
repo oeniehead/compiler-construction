@@ -14,6 +14,7 @@ import Scanner
 import SPLParser
 import Error
 import Misc
+import PrettyPrinter
 
 
 getCl :: IO [String]
@@ -50,10 +51,13 @@ main =
 			print "first syntax tree"		>>|
 			printAll (fst result)			>>|
 			print "tokens left:"			>>|
-			printAll (snd result)				)
+			printAll (snd result)			>>|
+			print "Pretty print:"			>>|
+			print (prettyPrint (fst result))	)
 		(	print "No syntax trees"				)
 	)											>>|
 	print ("Nr of derivations: " +++ (toString (length syntaxTrees))) >>|
+	
 	print "end"
 
 import GenString
@@ -66,5 +70,6 @@ instance toString Decl where toString d = gString{|*|} d
 printAll :: [a] -> IO () | toString a
 printAll [a:as] = print a >>| (printAll as)
 printAll []	  = return ()
+
 
 Start w = execIO main w

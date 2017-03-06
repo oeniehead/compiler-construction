@@ -22,8 +22,8 @@ sum2(l) :: [Int] -> Int {
 
 main() :: -> Void
 {
-	print (sum([1:2:3:[]]));
-	print (sum1([1:2:3:[]]));
-	print (sum2([1:2:3:[]]));
+	print (sum(1:2:3:[]));
+	print (sum1(1:2:3:[]));
+	print (sum2(1:2:3:[]));
 	return;
 }

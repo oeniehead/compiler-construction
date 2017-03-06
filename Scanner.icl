@@ -31,13 +31,13 @@ readToken =
 					'('	= return (Token (Brace Open Round) ("(") pos)
 					')'	= return (Token (Brace Close Round) (")") pos)
 					'['	= return (Token (Brace Open Square) ("[") pos)
-					']'	= return (Token (Brace Open Square) ("]") pos)
+					']'	= return (Token (Brace Close Square) ("]") pos)
 					
 					/** Other single character tokens **/
-					';' = return (Token TerminatorToken ";" pos)
-					'.' = return (Token Dot "." pos)
-					',' = return (Token Comma "," pos)
-					'\'' = return (Token SingleQuote "'" pos) // todo: parsing of character constants 'c'?
+					';'  = return (Token TerminatorToken ";" pos)
+					'.'  = return (Token Dot "." pos)
+					','  = return (Token Comma "," pos)
+					'\'' = return (Token SingleQuote "'" pos)
 					
 					/** Splittable binary operators **/
 					'+' = return (Token Operator "+" pos)

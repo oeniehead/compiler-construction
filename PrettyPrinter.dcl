@@ -1,5 +1,10 @@
 definition module PrettyPrinter
 
 import SPLParser
+import Indentation
 
-prettyPrint :: AST -> String
+prettyPrint :: a -> String | toShow a
+
+class toShow a 	:: a 	-> Show
+
+instance toShow AST

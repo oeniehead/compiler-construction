@@ -14,14 +14,17 @@ import Misc
 sh0 =	{ print  = []
 		, indent = 0 }
 
-prettyPrint :: Show -> String
-prettyPrint (Show sh) = foldl (+++) "" (reverse (sh sh0).print)
+show :: Show -> String
+show (Show sh) = foldl (+++) "" (reverse (sh sh0).print)
 
 rtrn :: String -> Show
 rtrn s = Show \sh -> {sh & print = [s:sh.print]}
 
 instance + Show where
 	(+) (Show f) (Show g) = Show (g o f)
+	
+instance zero Show where
+	zero = rtrn ""
 
 nl :: Show
 nl = Show \sh -> { sh & print = [toString ['\n':repeatn sh.indent '\t']:sh.print]}

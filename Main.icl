@@ -27,26 +27,41 @@ main =
 	print "=========================="			>>|
 	getArgs										>>= \args.
 	let file = hd args in
+	print ("File: " +++ file)					>>|
 	readFileM file								>>= \string.
 	print ("contents: \"" +++ string +++ "\"")	>>|
-//	print "scanning..."							>>|
+	print "scanning..."							>>|
 	let (tokens, sErrors) = scanner string in
 	(if (not (isEmpty sErrors))
 		(	print "Scanner errors:")
 		(	return ())
 	)											>>|
 	printAll sErrors							>>|
-//	print "Tokens:"								>>|
-//	printAll tokens								>>|
-//	print "Parsing..."							>>|
+	print "Tokens:"								>>|
+	printAll tokens								>>|
+	print "Parsing..."							>>|
 	let (syntaxTrees, pErrors) = parser tokens in
 	(if (not (isEmpty pErrors))
-		(	print "Parser Errors:")
+		(	print "Parser Errors:" >>| printAll pErrors)
 		(	return ())
 	)											>>|
-	printAll pErrors							>>|
-	print ("Nr of derivations: " +++ (toString (length syntaxTrees)))
-	
+	(if (not (isEmpty syntaxTrees))
+		(	let result = hd syntaxTrees in
+			print "first syntax tree"		>>|
+			printAll (fst result)			>>|
+			print "tokens left:"			>>|
+			printAll (snd result)				)
+		(	print "No syntax trees"				)
+	)											>>|
+	print ("Nr of derivations: " +++ (toString (length syntaxTrees))) >>|
+	print "end"
+
+import GenString
+import StdOverloaded
+derive gString Decl, FunDecl, VarDecl, FunType, Type, Stmt, Maybe, Expr, BasicType, FunCall,
+	IdWithFields, UnOp, BinOp, Field
+
+instance toString Decl where toString d = gString{|*|} d
 
 printAll :: [a] -> IO () | toString a
 printAll [a:as] = print a >>| (printAll as)

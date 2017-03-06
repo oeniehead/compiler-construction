@@ -137,6 +137,7 @@ where
 			case c of
 				Just '/'	= return ()
 				Just '*'	= readedStar
+				Just _		= endMultiLineComment
 				Nothing		= logHere WARN "Last multiline comment has no *\\ terminator"
 
 branchEq :: Position -> Scanner Token

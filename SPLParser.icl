@@ -31,7 +31,7 @@ parser tokens = runParser parseAST tokens
 //parse2op :: [Token] -> ([(Expr, [Token])], [Error])
 //parse2op tokens = runParser parseAST_Exp_Int tokens
 
-/*
+
 expTokens :: [Token]
 expTokens =  [
 		(Token NumToken "1" zero),
@@ -58,12 +58,34 @@ expIdent = [
 		(Token StringToken "fst" zero),
 		(Token EOFToken "" zero)]
 
+funType = [
+	(Token TypeIndicator "::" {line=0 ,col=8}),
+	(Token TypeArrow "->" {line=0 ,col=11}),
+	(Token StringToken "Void" {line=0 ,col=14})]
 
+funCall = [
+	(Token StringToken "first" {line=1 ,col=8}),
+	(Token (Brace Open Round) "(" {line=1 ,col=13}),
+	(Token StringToken "p1" {line=1 ,col=14}),
+	(Token (Brace Close Round) ")" {line=1 ,col=16})]
 
-Start = runParser parseIdentWithFields expIdent*/
+pars :: Parser Token Expr
+pars = 	parseExpIdent
+		<<|>	parseExpInt
+		<<|>	parseExpChar
+		<<|>	parseExpBool
+		<<|>	parseExpNested
+		<<|>	parseExpFunCall
+		<<|>	parseExpArray
+		<<|>	parseExpTuple
+
+//Start = runParser parseExp funCall 
+
 
 parseAST :: Parser Token AST
-parseAST = pMany parseDecl
+parseAST =	pMany parseDecl				>>= \decls.
+			//pSatisfyTokenType EOFToken	>>|
+			return decls
 
 parseDecl :: Parser Token Decl
 parseDecl = (
@@ -110,8 +132,10 @@ parseFunDecl :: Parser Token FunDecl
 //												// Id Args Vars Stmts
 //							>>= \(v, s). pYield (FunUntyped i a v s)
 //					)) 
-parseFunDecl = FunDecl <$> parseId <*> pBetweenBrackets Round parseIds <*> pMaybe parseFunType
-				<* pSatisfyBrace Open Curly <*> pMany parseVarDecl <*> pSome parseStmt <* pSatisfyBrace Close Curly
+parseFunDecl = FunDecl <$> parseId <*> pBetweenBrackets Round parseIds
+	<*> pMaybe (pSatisfyTokenType TypeIndicator >>| parseFunType)
+	<* pSatisfyBrace Open Curly <*> pMany parseVarDecl
+	<*> pSome parseStmt <* pSatisfyBrace Close Curly
 
 
 //	parseFunBody :: Parser Token ([VarDecl], [Stmt])
@@ -131,15 +155,26 @@ parseIds = (
 					pYield []
 				)
 
+//	parseFunType :: Parser Token FunType
+//	parseFunType = pMany parseType
+//					>>= \t. pSatisfyTokenType TypeArrow
+//					>>| ((
+//							pSatisfyTokenTypeString StringToken ["Void"]
+//						>>| pYield (FunTypeVoid t)) <<|> (
+//							parseType
+//						>>= \r. pYield (FunType t r))
+//					)
 parseFunType :: Parser Token FunType
-parseFunType = pMany parseType
-				>>= \t. pSatisfyTokenType TypeArrow
-				>>| ((
-						pSatisfyTokenTypeString StringToken ["Void"]
-					>>| pYield (FunTypeVoid t)) <<|> (
-						parseType
-					>>= \r. pYield (FunType t r))
-				)
+parseFunType =
+	pMany parseType									>>= \argTypes.
+	pSatisfyTokenType TypeArrow						>>|
+	(
+			(pSatisfyTokenTypeString StringToken ["Void"] >>|
+			 pYield (FunTypeVoid argTypes)						)
+		<<|>
+			( parseType	>>= \retType.
+			  pYield (FunType argTypes retType)		)
+	)
 
 parseType :: Parser Token Type
 //	parseType = parseBasicType >>= \t. pYield (TypeBasic t) <<|>
@@ -237,12 +272,13 @@ parseStmtFun = parseFunCall
 parseStmtReturn :: Parser Token Stmt
 parseStmtReturn =
 	pSatisfyTokenTypeString StringToken ["return"] >>| (
-				(	parseExp							>>= \exp.
-					pSatisfyTokenType TerminatorToken	>>|
-					pYield (StmtRet exp)								)
+			(	parseExp							>>= \exp.
+				pSatisfyTokenType TerminatorToken	>>|
+				pYield (StmtRet exp)						)	
 			<<|>
-				(	pYield (StmtRetV)								)
-	)				
+			(	pSatisfyTokenType TerminatorToken	>>|
+				pYield (StmtRetV)								)
+	)
 
 parseFunCall :: Parser Token FunCall
 parseFunCall = pSatisfyTokenType StringToken
@@ -495,12 +531,12 @@ OpUn ::=  ! | -
 
 Adjusted grammar:
 Exp			::= Exp1
-Exp1 ::= Exp2  [(Op1 Exp2 )*]
-Exp2 ::= Exp3  [(Op2 Exp3 )*]
-Exp3 ::= Exp4  [(Op3 Exp4 )*]
-Exp4 ::= Exp5  [(Op4 Exp5 )*]
-Exp5 ::= Exp6  [(Op5 Exp6 )*]
-Exp6 ::= ExpUn [(Op6 ExpUn)*]
+Exp1 ::= Exp2  (Op1 Exp2 )*
+Exp2 ::= Exp3  (Op2 Exp3 )*
+Exp3 ::= Exp4  (Op3 Exp4 )*
+Exp4 ::= Exp5  (Op4 Exp5 )*
+Exp5 ::= Exp6  (Op5 Exp6 )*
+Exp6 ::= ExpUn (Op6 ExpUn)*
 ExpUn ::= OpUn ExpUn | ExpAtom
 ExpAtom = ExpIdent  | ExpInt     | ExpChar 	     | ExpBool
         | ExpNested | ExpFunCall | ExpEmptyArray | ExpTuple
@@ -595,12 +631,12 @@ pExpUn =
 //		(tokens,_) = scanner "1-2-3"
 
 parseExpAtom :: Parser Token Expr
-parseExpAtom = 	parseExpIdent
+parseExpAtom = 	parseExpFunCall
 		<<|>	parseExpInt
 		<<|>	parseExpChar
 		<<|>	parseExpBool
 		<<|>	parseExpNested
-		<<|>	parseExpFunCall
+		<<|>	parseExpIdent
 		<<|>	parseExpArray
 		<<|>	parseExpTuple
 

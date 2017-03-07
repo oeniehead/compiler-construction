@@ -14,19 +14,9 @@ parser :: [Token] -> ([(AST, [Token])], [Error])
 	= Var VarDecl
 	| Fun FunDecl
 
-/* oud
-:: VarDecl
-	= VarTyped   Type Id Expr 	// typed variable
-	| VarUntyped      Id Expr 	// 'var' type
-*/
 :: VarDecl
 	= VarDecl (Maybe Type) Id Expr
 
-/* oud
-:: FunDecl
-	= FunTyped   Id [Id] FunType [VarDecl] [Stmt]		// typed function (with :: a -> b)
-	| FunUntyped Id [Id]         [VarDecl] [Stmt]		// without typing information
-*/
 :: FunDecl
 	= FunDecl Id [Arg] (Maybe FunType) [VarDecl] [Stmt]
 :: Arg :== Id
@@ -40,20 +30,18 @@ parser :: [Token] -> ([(AST, [Token])], [Error])
 :: Type
 	= BasicType BasicType
 	| TupleType Type Type
-//	| TypeArray [Type] Het is een arraytype, geen array van types! :)
 	| ArrayType Type
-	| IdentType Id // polymorphic type
+	| IdentType Id
 
 :: BasicType
 	= IntType
 	| BoolType
 	| CharType
 
-
 // -- Statement
 
 :: Stmt
-	= StmtIf Expr [Stmt] (Maybe [Stmt]) // If statement with possible else 
+	= StmtIf Expr [Stmt] (Maybe [Stmt])
 	| StmtWhile Expr [Stmt]
 	| StmtAss IdWithFields Expr
 	| StmtFunCall FunCall
@@ -68,9 +56,8 @@ parser :: [Token] -> ([(AST, [Token])], [Error])
 	| ExpBinOp Expr BinOp Expr
 	| ExpUnOp UnOp Expr
 	| ExpInt Int
-	| ExpChar Char // Was ExpChar String
+	| ExpChar Char
 	| ExpBool Bool
-//	| ExpNested Expr  Deze gaat heel vervelend worden bij dingen als typechecken en optimalisatie, dus heb ik verwijderd.
 	| ExpFunCall FunCall
 	| ExpEmptyArray
 	| ExpTuple Expr Expr

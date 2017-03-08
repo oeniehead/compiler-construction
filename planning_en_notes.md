@@ -24,5 +24,9 @@ Scanning testen
 - parse EOFToken
 - error voor als er meerdere/geen parse results zijn
 
+# Vragen
+- In a_bit_of_everything in examples: the if in the function abs has no braces. accidentally?
+(- in bool forgot ::)
+
 # Log
 02-03 11.30-13.00 Tom CL interfacing en comments negeren

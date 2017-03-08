@@ -316,10 +316,10 @@ pExpUn =
 
 parseExpAtom :: Parser Token Expr
 parseExpAtom = 	parseExpFunCall
+		<<|>	parseExpBool // else True and False are parsed as identifiers
 		<<|>	parseExpIdent
 		<<|>	parseExpInt
 		<<|>	parseExpChar
-		<<|>	parseExpBool
 		<<|>	parseExpNested
 		<<|>	parseExpArray
 		<<|>	parseExpTuple

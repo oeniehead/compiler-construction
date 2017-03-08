@@ -74,7 +74,7 @@ instance toShow Expr where
 	toShow (ExpUnOp op exprA) = rtrn "(" + toShow op + toShow exprA + rtrn ")"
 	toShow (ExpInt int) = rtrn (toString int)
 	toShow (ExpBool bool) = rtrn (toString bool)
-	toShow (ExpChar char) = rtrn (toString char)
+	toShow (ExpChar char) = rtrn "'" + rtrn (toString char) + rtrn "'"
 	toShow (ExpFunCall funCall) = toShow funCall
 	toShow (ExpEmptyArray) = rtrn "[]"
 	toShow (ExpTuple exprA exprB) = rtrn "(" + toShow exprA + rtrn ", " + toShow exprB + rtrn ")"

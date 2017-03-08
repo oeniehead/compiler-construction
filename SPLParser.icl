@@ -120,8 +120,8 @@ parseStmt :: Parser Token Stmt
 parseStmt = parseStmtIf <<|>
 			parseStmtWhile <<|>
 			parseStmtAss <<|>
-			parseStmtFunCall <<|>
-			parseStmtReturn
+			parseStmtReturn <<|>
+			parseStmtFunCall // this one should be at last, else return (1); is interpreted as a function call
 		where parseStmtFunCall = StmtFunCall <$> (parseFunCall <* pSatisfyTokenType TerminatorToken)
 
 parseStmtIf :: Parser Token Stmt
@@ -182,6 +182,51 @@ parseActArgs =
 	<<|>
 		( return [])
 
+/*
+Operators in increasing binding power:
+Op1  ::=  ||
+Op2  ::=  &&
+Op3  ::=  == | < | > | <= | >= | !=
+Op4  ::=  :
+Op5  ::=  + | -
+Op6  ::=  * | / | %
+OpUn ::=  ! | -
+
+Adjusted grammar:
+Exp		::= Exp1
+Exp1 ::= Exp2  (Op1 Exp2 )*
+Exp2 ::= Exp3  (Op2 Exp3 )*
+Exp3 ::= Exp4  (Op3 Exp4 )*
+Exp4 ::= Exp5  [Op4 Exp4 ]
+Exp5 ::= Exp6  (Op5 Exp6 )*
+Exp6 ::= ExpUn (Op6 ExpUn)*
+ExpUn ::= OpUn ExpUn | ExpAtom
+ExpAtom = ExpIdent  | ExpInt     | ExpChar 	     | ExpBool
+        | ExpNested | ExpFunCall | ExpEmptyArray | ExpTuple
+
+We parse the list comprehension operator as right associative operator, 
+because 1 : 2 : [] should be parsed as 1 : (2 : [])
+
+We parse all other operators as left associative operators. This is
+mandatory for - and /, because 1 - 2 - 3 should be interpreted as
+(1 - 2) - 3.
+It could be that the logical operators are more efficient if they
+would be right associative. In other languages (C, Java and mathematics),
+these operators are left associative, so we have chosen to stick to that
+convention.
+
+We have chosen : to have a  binding power between == and +, because then
+we can compare lists and we can make lists of summed integers {like
+1 + 2 : [] == [] is ((1 + 2) : []) == [] }. Haskell has the same precedence
+of these operators, so in this way we also stick to the conventions.
+
+Interesting cases:
+1 < 2 : 3 > 4 : [] == 1 < 2 : 4 > 5 : []
+[] == [] : []
+[] == ([] : []) :: Bool
+([] == []) : [] :: [Bool]
+*/
+
 // -- Parse Operators
 
 instance fromString BinOp where
@@ -209,9 +254,9 @@ instance fromString UnOp where
 op1  :== ["||"]
 op2  :== ["&&"]
 op3  :== ["==", "<", ">", "<=", ">=", "!="]
-op4  :== ["+", "-"]
-op5  :== ["*", "/", "%"]
-op6  :== [":"]
+op4  :== [":"]
+op5  :== ["+", "-"]
+op6  :== ["*", "/", "%"]
 opUn :== ["!", "-"]
 
 pBinOp :: [String] -> Parser Token BinOp
@@ -261,9 +306,9 @@ parseExp = pExp1
 pExp1 = pLeftAssocOps pExp2 pOp1
 pExp2 = pLeftAssocOps pExp3 pOp2
 pExp3 = pLeftAssocOps pExp4 pOp3
-pExp4 = pLeftAssocOps pExp5 pOp4
+pExp4 = pRightAssocOps pExp5 pOp4
 pExp5 = pLeftAssocOps pExp6 pOp5
-pExp6 = pRightAssocOps pExpUn pOp6
+pExp6 = pLeftAssocOps pExpUn pOp6
 pExpUn =
 		(ExpUnOp <$> pOpUn <*> pExpUn )
 	<<|>

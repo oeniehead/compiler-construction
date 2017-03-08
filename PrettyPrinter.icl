@@ -9,7 +9,7 @@ prettyPrint item = show (toShow item)
 
 concat :: [a] Show -> Show | toShow a
 concat [] 		_ = zero
-concat [a: []] 	_ = toShow a
+concat [a] 		_ = toShow a
 concat items glue = foldl (glueFunction) (toShow (hd items)) (map (toShow) (tl items))
 	where
 		glueFunction = \a b. a + glue + b
@@ -24,7 +24,7 @@ instance toShow Decl where
 	
 instance toShow VarDecl where
 	toShow (VarDecl mType id expr) = 
-		typeShow + rtrn id + rtrn " = " + toShow expr
+		typeShow + rtrn id + rtrn " = " + toShow expr + rtrn ";"
 	where
 		typeShow = case mType of
 			(Just type)	= toShow type + rtrn " "
@@ -63,10 +63,10 @@ instance toShow Stmt where
 	toShow (StmtRet expr) = rtrn "return " + toShow expr + rtrn ";"
 	toShow (StmtRetV) = rtrn "return;"
 
-instance toShow [Expr] where
-	toShow exprs = foldl (plusWithComma) zero (map (toShow) exprs)
-	where
-		plusWithComma = \a b. a + rtrn ", " + b
+//	instance toShow [Expr] where
+//		toShow exprs = foldl (plusWithComma) zero (map (toShow) exprs)
+//		where
+//			plusWithComma = \a b. a + rtrn ", " + b //dead code, incorrect because it will start with a comma
 
 instance toShow Expr where
 	toShow (ExpIdent id) = toShow id

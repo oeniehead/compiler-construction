@@ -2,14 +2,17 @@ definition module Misc
 
 from StdOverloaded import class zero
 import StdMisc
-import GenString
+import GenString, GenEq
 
 :: Position = { line :: Int, col :: Int }
 
-instance zero Position
-instance toString Position
-
 derive gString Position
+derive gEq Position
+
+instance toString	Position
+instance ==			Position
+instance zero		Position
+
 
 nextPos :: Position Char -> Position
 

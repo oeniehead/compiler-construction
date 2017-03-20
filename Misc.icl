@@ -4,6 +4,7 @@ import StdMisc
 from StdOverloaded import class zero
 import CustomStdEnv
 import GenString
+import GenEq
 
 nextPos :: Position Char -> Position
 nextPos {line, col} c = case c of
@@ -11,9 +12,11 @@ nextPos {line, col} c = case c of
 	_		= {line = line    , col = col + 1}
 
 derive gString Position
+derive gEq Position
 
-instance zero Position		where zero			= {line = 0, col = 0}
 instance toString Position	where toString p	= gString{|*|} p 
+instance ==	Position		where == a b		= gEq{|*|} a b
+instance zero Position		where zero			= {line = 0, col = 0}
 
 toBeImplemented :: .a
 toBeImplemented = abort "Program evaluated unimplemented function"

@@ -89,7 +89,8 @@ instance toShow Type where
 	toShow (IdentType id)			= rtrn id
 	
 instance toShow IdWithFields where
-	toShow (IdWithFields id fields) = rtrn id + (concat fields (zero))
+	toShow (WithField id field) = (toShow id) + (toShow field)
+	toShow (JustId id) 			= rtrn id
 				
 instance toShow Field where
 	toShow FieldHd = rtrn ".hd"

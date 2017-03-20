@@ -378,7 +378,11 @@ parseIdentWithFields :: Parser Token IdWithFields
 parseIdentWithFields = parseId 
 			>>= \id. pMany parseField
 			>>= \fields.
-				pYield (IdWithFields id fields)
+				pYield (createFieldList (JustId id) fields)
+			where
+				createFieldList :: IdWithFields [Field] -> IdWithFields
+				createFieldList id [] = id
+				createFieldList id [field:fields] = createFieldList (WithField id field) fields  
 
 parseField :: Parser Token Field
 parseField = pSatisfyTokenType Dot

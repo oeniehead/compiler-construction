@@ -86,7 +86,8 @@ parser :: [Token] -> ([(AST, [Token])], [Error])
 	| OpNeg
 
 :: IdWithFields
-	= IdWithFields Id [Field]
+	= WithField IdWithFields Field
+	| JustId	Id
 
 :: Field
 	= FieldHd

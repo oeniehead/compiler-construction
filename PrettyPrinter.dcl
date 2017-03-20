@@ -1,7 +1,7 @@
 definition module PrettyPrinter
 
 import SPLParser
-import Indentation
+from Indentation import :: Show
 
 prettyPrint :: a -> String | toShow a
 

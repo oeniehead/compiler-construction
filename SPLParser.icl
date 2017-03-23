@@ -6,7 +6,9 @@ import Misc
 
 import Control.Applicative
 import Control.Monad
-	
+
+import StdArray
+
 pSatisfyTokenType :: TokenType -> Parser Token Token
 pSatisfyTokenType type = pSatisfy (\(Token other_type _ _). type == other_type)
 	

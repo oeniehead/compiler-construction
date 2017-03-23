@@ -8,6 +8,8 @@ import Token
 import Error
 import Misc
 
+import StdArray
+
 :: Scanner a = Scanner (ScannerState -> (a, ScannerState))
 :: ScannerState =	{ buffer	:: String
 					, sPos		:: Position

@@ -5,7 +5,7 @@ import
 	StdInt,
 	StdReal,
 	StdChar,
-	StdArray,
+//	StdArray, name clash met Data.Set, importeer waar nodig
 	StdString,
 	StdFile,
 

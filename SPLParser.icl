@@ -88,16 +88,16 @@ parseIds = (
 					pYield []
 				)
 
-parseFunType :: Parser Token FunType
+parseFunType :: Parser Token Type
 parseFunType =
 	pMany parseType									>>= \argTypes.
 	pSatisfyTokenType TypeArrow						>>|
 	(
 			(pSatisfyTokenTypeString StringToken ["Void"] >>|
-			 pYield (FunTypeVoid argTypes)						)
+			 pYield (FuncType argTypes Nothing)				)
 		<<|>
 			( parseType	>>= \retType.
-			  pYield (FunType argTypes retType)		)
+			  pYield (FuncType argTypes (Just retType))		)
 	)
 
 parseType :: Parser Token Type

@@ -44,10 +44,6 @@ instance toShow FunDecl where
 	
 instance toShow Arg where
 	toShow a	= rtrn a
-
-instance toShow FunType where
-	toShow (FunType argTypes type) 	= concat argTypes (rtrn " ") + rtrn " -> " + toShow type
-	toShow (FunTypeVoid argTypes)	= concat argTypes (rtrn " ") + rtrn " -> Void"
 		
 instance toShow Stmt where
 	toShow (StmtIf cond stmtA mStmtB) = rtrn "if ( " + toShow cond + rtrn " ) {" + 
@@ -83,11 +79,23 @@ instance toShow FunCall where
 	toShow (FunCall id args) = rtrn id + rtrn "(" + concat args (rtrn ", ") + rtrn ")"
 
 instance toShow Type where
-	toShow (BasicType type) 		= toShow type
-	toShow (TupleType typeA typeB) 	= rtrn "(" + toShow typeA + rtrn ", " + toShow typeB + rtrn ")"
-	toShow (ArrayType type) 		= rtrn "[" + toShow type + rtrn "]"
-	toShow (IdentType id)			= rtrn id
-	
+	toShow type = toShow` type False
+	where
+		toShow` :: Type Bool -> Show // Bool indicates if brackets might be needed
+		toShow` (BasicType type) _				= toShow type
+		toShow` (TupleType typeA typeB) _		= rtrn "(" + toShow typeA + rtrn ", " + toShow typeB + rtrn ")"
+		toShow` (ArrayType type) _				= rtrn "[" + toShow type + rtrn "]"
+		toShow` (IdentType id) _				= rtrn id
+		toShow` funcType				 True	= rtrn "(" + toShow` funcType False + rtrn ")"
+		toShow` (FuncType args mType)	 False	= concatArgs args + rtrn " -> " + 
+													case mType of
+														Nothing	= rtrn "Void"
+														Just t	= toShow` t False
+		concatArgs :: [Type] -> Show
+		concatArgs []		= rtrn ""
+		concatArgs [t]		= toShow` t True
+		concatArgs [t:ts]	= toShow` t True + rtrn " " + concatArgs ts
+
 instance toShow IdWithFields where
 	toShow (WithField id field) = (toShow id) + (toShow field)
 	toShow (JustId id) 			= rtrn id

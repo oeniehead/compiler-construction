@@ -9,6 +9,10 @@ parser :: [Token] -> ([(AST, [Token])], [Error])
 // -- SPL
 :: AST :== [Decl]
 
+:: MetaData = { pos		:: Position
+			  , type	:: Maybe Type
+			  }
+
 // -- Declarations
 :: Decl
 	= Var VarDecl
@@ -18,20 +22,17 @@ parser :: [Token] -> ([(AST, [Token])], [Error])
 	= VarDecl (Maybe Type) Id Expr
 
 :: FunDecl
-	= FunDecl Id [Arg] (Maybe FunType) [VarDecl] [Stmt]
+	= FunDecl Id [Arg] (Maybe Type) [VarDecl] [Stmt]
 :: Arg :== Id
 
 
 // -- Types
-:: FunType
-	= FunType     [Type] Type
-	| FunTypeVoid [Type]
-
 :: Type
 	= BasicType BasicType
 	| TupleType Type Type
 	| ArrayType Type
 	| IdentType Id
+	| FuncType [Type] (Maybe Type) // list of arguments and return type
 
 :: BasicType
 	= IntType

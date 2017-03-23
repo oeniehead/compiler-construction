@@ -62,7 +62,7 @@ main =
 
 import GenString
 import StdOverloaded
-derive gString Decl, FunDecl, VarDecl, FunType, Type, Stmt, Maybe, Expr, BasicType, FunCall,
+derive gString Decl, FunDecl, VarDecl, Type, Stmt, Maybe, Expr, BasicType, FunCall,
 	IdWithFields, UnOp, BinOp, Field
 
 instance toString Decl where toString d = gString{|*|} d

@@ -9,11 +9,19 @@ import Control.Monad
 
 import StdArray
 
+instance zero MetaData where
+	zero = { pos  = zero
+		   , type = Nothing
+		   }
+
 pSatisfyTokenType :: TokenType -> Parser Token Token
 pSatisfyTokenType type = pSatisfy (\(Token other_type _ _). type == other_type)
 	
 pSatisfyTokenTypeString :: TokenType [String] -> Parser Token Token
 pSatisfyTokenTypeString type strings = pSatisfy (\(Token other_type string _). (type == other_type) && (isMember string strings))
+
+pSatisfyStringToken :: [String] -> Parser Token Token
+pSatisfyStringToken strings = pSatisfyTokenTypeString StringToken strings
 
 pSatisfyBrace :: BraceType BraceStyle -> Parser Token Token
 pSatisfyBrace btype bstyle = pSatisfy (\(Token type _ _) = 
@@ -67,7 +75,7 @@ parseVarDecl :: Parser Token VarDecl
 parseVarDecl = VarDecl <$> parseVarType <*> parseId <* pSatisfyTokenType Assignment
 				<*> parseExp <* pSatisfyTokenType TerminatorToken
 where
-	parseVarType = (pSatisfyTokenTypeString StringToken ["var"] >>| return Nothing)
+	parseVarType = (pSatisfyStringToken ["var"] >>| return Nothing)
 				   <<|>
 				   (Just <$> parseType)
 
@@ -93,7 +101,7 @@ parseFunType =
 	pMany parseType									>>= \argTypes.
 	pSatisfyTokenType TypeArrow						>>|
 	(
-			(pSatisfyTokenTypeString StringToken ["Void"] >>|
+			(pSatisfyStringToken ["Void"] >>|
 			 pYield (FuncType argTypes Nothing)				)
 		<<|>
 			( parseType	>>= \retType.
@@ -114,9 +122,9 @@ where
 	parseIdentType = IdentType <$> parseId
 
 parseBasicType :: Parser Token BasicType
-parseBasicType = (pSatisfyTokenTypeString StringToken ["Int"] >>| pYield (IntType)) <<|>
-					(pSatisfyTokenTypeString StringToken ["Bool"] >>| pYield (BoolType)) <<|>
-					(pSatisfyTokenTypeString StringToken ["Char"] >>| pYield (CharType))
+parseBasicType = (pSatisfyStringToken ["Int"] >>| pYield (IntType)) <<|>
+					(pSatisfyStringToken ["Bool"] >>| pYield (BoolType)) <<|>
+					(pSatisfyStringToken ["Char"] >>| pYield (CharType))
 
 parseStmt :: Parser Token Stmt
 parseStmt = parseStmtIf <<|>
@@ -127,17 +135,17 @@ parseStmt = parseStmtIf <<|>
 		where parseStmtFunCall = StmtFunCall <$> (parseFunCall <* pSatisfyTokenType TerminatorToken)
 
 parseStmtIf :: Parser Token Stmt
-parseStmtIf = pSatisfyTokenTypeString StringToken ["if"]	>>|
+parseStmtIf = pSatisfyStringToken ["if"]	>>|
 			pBetweenBrackets Round parseExp					>>= \exp.
 			pBetweenBrackets Curly (pMany parseStmt)		>>= \body.
 			pMaybe elsepart									>>= \maybeElseBody.
 			return (StmtIf exp body maybeElseBody)
 where
-	elsepart =	pSatisfyTokenTypeString StringToken ["else"]	>>|
+	elsepart =	pSatisfyStringToken ["else"]	>>|
 				pBetweenBrackets Curly (pMany parseStmt)
 			
 parseStmtWhile :: Parser Token Stmt
-parseStmtWhile =  pSatisfyTokenTypeString StringToken ["while"]
+parseStmtWhile =  pSatisfyStringToken ["while"]
 			>>| pSatisfyBrace Open Round
 			>>| parseExp
 			>>= \exp. pSatisfyBrace Close Round
@@ -160,7 +168,7 @@ parseStmtFun = parseFunCall
 				
 parseStmtReturn :: Parser Token Stmt
 parseStmtReturn =
-	pSatisfyTokenTypeString StringToken ["return"] >>| (
+	pSatisfyStringToken ["return"] >>| (
 			(	parseExp							>>= \exp.
 				pSatisfyTokenType TerminatorToken	>>|
 				pYield (StmtRet exp)						)	
@@ -347,7 +355,7 @@ parseExpChar =  pSatisfyTokenType SingleQuote
 			>>| pYield (ExpChar (select s 0)))
 
 parseExpBool :: Parser Token Expr
-parseExpBool = pSatisfyTokenTypeString StringToken ["True", "False"]
+parseExpBool = pSatisfyStringToken ["True", "False"]
 			>>= (\(Token StringToken s _). pYield (ExpBool (if (s == "True") True False)))
 			
 parseExpNested :: Parser Token Expr
@@ -388,7 +396,7 @@ parseIdentWithFields = parseId
 
 parseField :: Parser Token Field
 parseField = pSatisfyTokenType Dot
-			>>| pSatisfyTokenTypeString StringToken ["hd", "tl", "fst", "snd"]
+			>>| pSatisfyStringToken ["hd", "tl", "fst", "snd"]
 			>>= (\(Token StringToken s _).
 				let t = case s of
 						"hd" 	= FieldHd

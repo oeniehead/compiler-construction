@@ -13,58 +13,60 @@ parser :: [Token] -> ([(AST, [Token])], [Error])
 			  , type	:: Maybe Type
 			  }
 
+instance zero MetaData
+
 // -- Declarations
 :: Decl
-	= Var VarDecl
-	| Fun FunDecl
+	= Var VarDecl		MetaData
+	| Fun FunDecl		MetaData
 
 :: VarDecl
-	= VarDecl (Maybe Type) Id Expr
+	= VarDecl (Maybe Type) Id Expr		MetaData
 
 :: FunDecl
-	= FunDecl Id [Arg] (Maybe Type) [VarDecl] [Stmt]
+	= FunDecl Id [Arg] (Maybe Type) [VarDecl] [Stmt]	MetaData
 :: Arg :== Id
 
 
 // -- Types
 :: Type
-	= BasicType BasicType
-	| TupleType Type Type
-	| ArrayType Type
-	| IdentType Id
-	| FuncType [Type] (Maybe Type) // list of arguments and return type
+	= BasicType BasicType			MetaData
+	| TupleType Type Type			MetaData
+	| ArrayType Type 				MetaData
+	| IdentType Id					MetaData
+	| FuncType [Type] (Maybe Type)	MetaData // list of arguments and return type
 
 :: BasicType
-	= IntType
-	| BoolType
-	| CharType
+	= IntType	MetaData
+	| BoolType	MetaData
+	| CharType	MetaData
 
 // -- Statement
 
 :: Stmt
-	= StmtIf Expr [Stmt] (Maybe [Stmt])
-	| StmtWhile Expr [Stmt]
-	| StmtAss IdWithFields Expr
-	| StmtFunCall FunCall
-	| StmtRet Expr
-	| StmtRetV
+	= StmtIf Expr [Stmt] (Maybe [Stmt])	MetaData
+	| StmtWhile Expr [Stmt]				MetaData
+	| StmtAss IdWithFields Expr			MetaData
+	| StmtFunCall FunCall				MetaData
+	| StmtRet Expr						MetaData
+	| StmtRetV							MetaData
 
 
 // -- Expression
 
 :: Expr
-	= ExpIdent IdWithFields
-	| ExpBinOp Expr BinOp Expr
-	| ExpUnOp UnOp Expr
-	| ExpInt Int
-	| ExpChar Char
-	| ExpBool Bool
-	| ExpFunCall FunCall
-	| ExpEmptyArray
-	| ExpTuple Expr Expr
+	= ExpIdent IdWithFields		MetaData
+	| ExpBinOp Expr BinOp Expr	MetaData
+	| ExpUnOp UnOp Expr			MetaData
+	| ExpInt Int				MetaData
+	| ExpChar Char				MetaData
+	| ExpBool Bool				MetaData
+	| ExpFunCall FunCall		MetaData
+	| ExpEmptyArray				MetaData
+	| ExpTuple Expr Expr		MetaData
 
 :: FunCall
-	= FunCall Id [Expr]
+	= FunCall Id [Expr]		MetaData
 
 :: BinOp
 	= OpPlus
@@ -87,8 +89,8 @@ parser :: [Token] -> ([(AST, [Token])], [Error])
 	| OpNeg
 
 :: IdWithFields
-	= WithField IdWithFields Field
-	| JustId	Id
+	= WithField IdWithFields Field		MetaData
+	| JustId	Id						MetaData
 
 :: Field
 	= FieldHd

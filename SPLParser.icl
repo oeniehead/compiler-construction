@@ -15,50 +15,31 @@ instance zero MetaData where
 		   , type = Nothing
 		   }
 
-withPos :: (Position -> Parser a) -> Parser a
+withPos :: (Position -> Parser Token a) -> Parser Token a
 withPos f = (pGetPos >>= f) @! (makeError zero FATAL Parsing "Failed to determine current position")
 
-withMeta :: (MetaData -> Parser a) -> Parser a // make a MetaData with current pos and no type information
+withMeta :: (MetaData -> Parser Token a) -> Parser Token a // make a MetaData with current pos and no type information
 withMeta f = withPos (\p. f {pos = p, type = Nothing})
 
-//pMakeMeta :: Parser MetaData
-//pMakeMeta = pGetPrevPos >>= (\pos -> pYield {type = Nothing, pos = pos})
-
-//pYield :: (MetaData -> a) -> Parser a
-//pYield f = pGetPrevPos >>= \pos.
-//	pYield (f {type = Nothing, pos = pos})
-
-//(<$*>) infixl 4 :: (a MetaData -> b) (Parser a) -> Parser b
-//(<$*>) f pa = fmap f pa >>= pYield
-
-//pManyMeta :: (MetaData -> Parser r) -> Parser [r]
-//pManyMeta p = (pSomeMeta p ) <<|> pure []
-
-//pSomeMeta :: (MetaData -> Parser r) -> Parser [r]
-//pSomeMeta p = (pMakeMeta >>= p) <:> pManyMeta p
-
-//(<:*>) infixr 6 :: (Parser (MetaData -> r)) (Parser [r]) -> Parser [r]
-//(<:*>) p1 p2 = (\r rs -> [r : rs]) <$> (pMakeMeta >>= p1) <*> p2
-
-pSatisfyTokenType :: TokenType -> Parser Token
+pSatisfyTokenType :: TokenType -> Parser Token Token
 pSatisfyTokenType type = pSatisfy (\(Token other_type _ _). type == other_type)
-	
-pSatisfyTokenTypeString :: TokenType [String] -> Parser Token
+
+pSatisfyTokenTypeString :: TokenType [String] -> Parser Token Token
 pSatisfyTokenTypeString type strings = pSatisfy (\(Token other_type string _). (type == other_type) && (isMember string strings))
 
-pSatisfyStringToken :: [String] -> Parser Token
+pSatisfyStringToken :: [String] -> Parser Token Token
 pSatisfyStringToken strings = pSatisfyTokenTypeString StringToken strings
 
-pSatisfyBrace :: BraceType BraceStyle -> Parser Token
+pSatisfyBrace :: BraceType BraceStyle -> Parser Token Token
 pSatisfyBrace btype bstyle = pSatisfy (\(Token type _ _) = 
 					case type of
 						(Brace other_btype other_bstyle) = other_btype == btype && other_bstyle == bstyle 
 						_	= False)
 
-pMaybe :: (Parser t) -> Parser (Maybe t)
+pMaybe :: (Parser t a) -> Parser t (Maybe a)
 pMaybe parse = (Just <$> parse) <<|> (pYield Nothing)
 
-pBetweenBrackets :: BraceStyle (Parser t) -> Parser t
+pBetweenBrackets :: BraceStyle (Parser Token a) -> Parser Token a
 pBetweenBrackets bstyle parse = pSatisfyBrace Open bstyle *> parse <* pSatisfyBrace Close bstyle
 
 parser :: [Token] -> Either [Error] AST
@@ -74,7 +55,7 @@ funType = [
 	(Token StringToken "dcLengthOfMonth" {line=21 ,col=49})
 	]
 
-pars :: Parser [Expr]
+pars :: Parser Token [Expr]
 pars =
 		(parseExp										>>= \e.
 		pMany (pSatisfyTokenType Comma >>| parseExp)	>>= \es.
@@ -85,12 +66,12 @@ pars =
 //Start = runParser pars funType 
 
 
-parseAST :: Parser AST
+parseAST :: Parser Token AST
 parseAST =	pMany parseDecl				>>= \decls.
 			pSatisfyTokenType EOFToken	>>|
 			return decls
 
-parseDecl :: Parser Decl
+parseDecl :: Parser Token Decl
 parseDecl = withMeta \meta.
 	(
 		parseVarDecl >>= \v. pYield (Var v meta)
@@ -98,7 +79,7 @@ parseDecl = withMeta \meta.
 		parseFunDecl >>= \f. pYield (Fun f meta)
 	)
 
-parseVarDecl :: Parser VarDecl
+parseVarDecl :: Parser Token VarDecl
 parseVarDecl =  withPos							\pos.
 			parseVarType						>>= \vartype.
 			parseId								>>= \id.
@@ -111,7 +92,7 @@ where
 				   <<|>
 				   (Just <$> parseType)
 
-parseFunDecl :: Parser FunDecl
+parseFunDecl :: Parser Token FunDecl
 parseFunDecl = withPos												\pos.
 	parseId														>>= \name.
 	pBetweenBrackets Round parseIds								>>= \args.
@@ -122,7 +103,7 @@ parseFunDecl = withPos												\pos.
 	pSatisfyBrace Close Curly									>>|
 	return (FunDecl name args mType vardecls stmts {pos=pos, type=mType})
 				
-parseIds :: Parser [Id]
+parseIds :: Parser Token [Id]
 parseIds = (
 						parseId
 					>>= \t. pMany (
@@ -133,7 +114,7 @@ parseIds = (
 					pYield []
 				)
 
-parseFunType :: Parser Type
+parseFunType :: Parser Token Type
 parseFunType = withPos							\pos.
 	pMany parseType							>>= \argTypes.
 	pSatisfyTokenType TypeArrow				>>|
@@ -145,7 +126,7 @@ parseFunType = withPos							\pos.
 			  pYield (FuncType argTypes (Just retType) pos) )
 	)
 
-parseType :: Parser Type
+parseType :: Parser Token Type
 parseType = withPos (\pos.
 	pBasicType pos <<|> pTupleType pos <<|> pArrayType pos <<|> pIdentType pos
 	)
@@ -162,7 +143,7 @@ where
 		ArrayType <$> pBetweenBrackets Square parseType <*> return pos
 	pIdentType pos = IdentType <$> parseId <*> return pos
 
-parseBasicType :: Parser BasicType
+parseBasicType :: Parser Token BasicType
 parseBasicType = withPos 							\pos.
 	pSatisfyStringToken ["Int","Bool","Char"]	>>= \(Token _ string _).
 	case string of
@@ -170,7 +151,7 @@ parseBasicType = withPos 							\pos.
 		"Bool"	= return (BoolType	pos)
 		"Char"	= return (CharType	pos)
 
-parseStmt :: Parser Stmt
+parseStmt :: Parser Token Stmt
 parseStmt = parseStmtIf <<|>
 			parseStmtWhile <<|>
 			parseStmtAss <<|>
@@ -179,7 +160,7 @@ parseStmt = parseStmtIf <<|>
 where parseStmtFunCall = withMeta \meta.
 			StmtFunCall <$> (parseFunCall <* pSatisfyTokenType TerminatorToken) <*> return meta
 
-parseStmtIf :: Parser Stmt
+parseStmtIf :: Parser Token Stmt
 parseStmtIf = withMeta										\meta.
 			pSatisfyStringToken ["if"]					>>|
 			pBetweenBrackets Round parseExp				>>= \exp.
@@ -190,7 +171,7 @@ where
 	elsepart =	pSatisfyStringToken ["else"]	>>|
 				pBetweenBrackets Curly (pMany parseStmt)
 			
-parseStmtWhile :: Parser Stmt
+parseStmtWhile :: Parser Token Stmt
 parseStmtWhile =  withMeta							\meta.
 			pSatisfyStringToken ["while"]		>>|
 			pSatisfyBrace Open Round			>>|
@@ -201,7 +182,7 @@ parseStmtWhile =  withMeta							\meta.
 			pSatisfyBrace Close Curly			>>|
 			pYield (StmtWhile exp stmts meta)
 			
-parseStmtAss :: Parser Stmt
+parseStmtAss :: Parser Token Stmt
 parseStmtAss = withMeta 					\meta.
 	parseIdentWithFields				>>= \i.
 	pSatisfyTokenType Assignment		>>|
@@ -209,13 +190,13 @@ parseStmtAss = withMeta 					\meta.
 	pSatisfyTokenType TerminatorToken	>>|
 	pYield (StmtAss i e meta)
 				
-parseStmtFun :: Parser Stmt
+parseStmtFun :: Parser Token Stmt
 parseStmtFun = withMeta						\meta.
 	parseFunCall						>>= \f.
 	pSatisfyTokenType TerminatorToken	>>|
 	pYield (StmtFunCall f meta)
 				
-parseStmtReturn :: Parser Stmt
+parseStmtReturn :: Parser Token Stmt
 parseStmtReturn = withMeta								\meta.
 	pSatisfyStringToken ["return"] >>| (
 			(	parseExp							>>= \exp.
@@ -226,13 +207,13 @@ parseStmtReturn = withMeta								\meta.
 				pYield (StmtRetV meta)							)
 	)
 
-parseFunCall :: Parser FunCall
+parseFunCall :: Parser Token FunCall
 parseFunCall = withMeta							\meta.
 		pSatisfyTokenType StringToken		>>= \(Token StringToken name _).
 		pBetweenBrackets Round parseActArgs	>>= \args.
 		pYield (FunCall name args meta)
 
-parseActArgs :: Parser [Expr]
+parseActArgs :: Parser Token [Expr]
 parseActArgs =
 		( parseExp										>>= \e.
 		pMany (pSatisfyTokenType Comma >>| parseExp)	>>= \es.
@@ -317,11 +298,11 @@ op5  :== ["+", "-"]
 op6  :== ["*", "/", "%"]
 opUn :== ["!", "-"]
 
-pBinOp :: [String] -> Parser BinOp
+pBinOp :: [String] -> Parser Token BinOp
 pBinOp ops = pSatisfyTokenTypeString Operator ops
 			>>= \(Token _ op _). return (fromString op)
 
-pUnOp :: [String] -> Parser UnOp
+pUnOp :: [String] -> Parser Token UnOp
 pUnOp ops = pSatisfyTokenTypeString Operator ops
 			>>= \(Token _ op _). return (fromString op)
 
@@ -336,7 +317,7 @@ pOpUn = pUnOp opUn
 
 // -- Parse Expression
 
-pLeftAssocOps :: (Parser Expr) (Parser BinOp) -> Parser Expr
+pLeftAssocOps :: (Parser Token Expr) (Parser Token BinOp) -> Parser Token Expr
 pLeftAssocOps parseItem parseOp =
 	parseItem	>>= \item.
 	pMany (	parseOp		>>= \op.
@@ -349,7 +330,7 @@ where
 	makeExp item [(op,i2,meta):rest]
 						= makeExp (ExpBinOp item op i2 meta) rest
 						
-pRightAssocOps :: (Parser Expr) (Parser BinOp) -> Parser Expr
+pRightAssocOps :: (Parser Token Expr) (Parser Token BinOp) -> Parser Token Expr
 pRightAssocOps parseItem parseOp =
 	parseItem	>>= \item.
 		(	(parseOp							>>= \op.
@@ -360,7 +341,7 @@ pRightAssocOps parseItem parseOp =
 			(pYield item)
 		)
 
-parseExp :: Parser Expr
+parseExp :: Parser Token Expr
 parseExp = pExp1
 
 pExp1 = pLeftAssocOps pExp2 pOp1
@@ -377,7 +358,7 @@ pExpUn =
 	<<|>
 		(parseExpAtom)
 
-parseExpAtom :: Parser Expr
+parseExpAtom :: Parser Token Expr
 parseExpAtom = 	parseExpFunCall
 		<<|>	parseExpBool // else True and False are parsed as identifiers
 		<<|>	parseExpIdent
@@ -389,17 +370,17 @@ parseExpAtom = 	parseExpFunCall
 
 
 
-parseExpIdent :: Parser Expr
+parseExpIdent :: Parser Token Expr
 parseExpIdent = withMeta			\meta.
 		parseIdentWithFields	>>= \ident.
 		pYield (ExpIdent ident meta)
 
-parseExpInt :: Parser Expr
+parseExpInt :: Parser Token Expr
 parseExpInt = withMeta					\meta.
 		pSatisfyTokenType NumToken	>>= \(Token NumToken s _).
 		pYield (ExpInt (toInt s) meta)
 			
-parseExpChar :: Parser Expr
+parseExpChar :: Parser Token Expr
 parseExpChar =  withMeta					\meta.
 		pSatisfyTokenType SingleQuote	>>|
 		pSatisfy (\(Token type s _) = 
@@ -410,30 +391,30 @@ parseExpChar =  withMeta					\meta.
 		pSatisfyTokenType SingleQuote	>>|
 		pYield (ExpChar (select s 0) meta)
 
-parseExpBool :: Parser Expr
+parseExpBool :: Parser Token Expr
 parseExpBool = withMeta							\meta.
 	pSatisfyStringToken ["True", "False"]	>>= \(Token StringToken s _).
 	pYield (ExpBool (s == "True") meta)
 			
-parseExpNested :: Parser Expr
+parseExpNested :: Parser Token Expr
 parseExpNested = pSatisfyBrace Open Round
 			>>| parseExp
 			>>= \exp. pSatisfyBrace Close Round
 			>>| pYield exp
 			
-parseExpFunCall :: Parser Expr
+parseExpFunCall :: Parser Token Expr
 parseExpFunCall = withMeta		\meta.
 		parseFunCall		>>= \funcall.
 		pYield (ExpFunCall funcall meta)
 			
-parseExpArray :: Parser Expr
+parseExpArray :: Parser Token Expr
 parseExpArray = withMeta \meta.
 				pSatisfyBrace Open Square
 			>>| pSatisfyBrace Close Square
 			>>| pYield (ExpEmptyArray meta)
 
 
-parseExpTuple :: Parser Expr
+parseExpTuple :: Parser Token Expr
 parseExpTuple = withMeta					\meta.
 			pSatisfyBrace Open Round	>>| 
 			parseExp					>>= \exp1.
@@ -444,7 +425,7 @@ parseExpTuple = withMeta					\meta.
 
 // -- Parse Ident and fields
 
-parseIdentWithFields :: Parser IdWithFields
+parseIdentWithFields :: Parser Token IdWithFields
 parseIdentWithFields = withMeta 	\meta.
 			parseId				>>= \id.
 			pMany parseField	>>= \fields.
@@ -454,7 +435,7 @@ parseIdentWithFields = withMeta 	\meta.
 				createFieldList id [] meta = id
 				createFieldList id [field:fields] meta = createFieldList (WithField id field meta) fields meta
 
-parseField :: Parser Field
+parseField :: Parser Token Field
 parseField = pSatisfyTokenType Dot
 			>>| pSatisfyStringToken ["hd", "tl", "fst", "snd"]
 			>>= (\(Token StringToken s _).
@@ -466,7 +447,7 @@ parseField = pSatisfyTokenType Dot
 				in pYield t
 			)
 
-parseId :: Parser Id
+parseId :: Parser Token Id
 parseId = pSatisfy (\t. case t of
 							(Token StringToken _ _) = True
 							(Token _ _ _)		 	= False)

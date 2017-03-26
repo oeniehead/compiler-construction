@@ -3,8 +3,9 @@ definition module SPLParser
 import Token
 import Misc
 import Error
+from Data.Either import :: Either
 
-parser :: [Token] -> ([(AST, [Token])], [Error])
+parser :: [Token] -> Either [Error] AST
 
 // -- SPL
 :: AST :== [Decl]
@@ -30,16 +31,16 @@ instance zero MetaData
 
 // -- Types
 :: Type
-	= BasicType BasicType			MetaData
-	| TupleType Type Type			MetaData
-	| ArrayType Type 				MetaData
-	| IdentType Id					MetaData
-	| FuncType [Type] (Maybe Type)	MetaData // list of arguments and return type
+	= BasicType BasicType			Position
+	| TupleType Type Type			Position
+	| ArrayType Type 				Position
+	| IdentType Id					Position
+	| FuncType [Type] (Maybe Type)	Position // list of arguments and return type(voor verslag)
 
 :: BasicType
-	= IntType	MetaData
-	| BoolType	MetaData
-	| CharType	MetaData
+	= IntType	Position
+	| BoolType	Position
+	| CharType	Position
 
 // -- Statement
 

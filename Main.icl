@@ -15,6 +15,7 @@ import SPLParser
 import Error
 import Misc
 import PrettyPrinter
+import Data.Either
 
 
 getCl :: IO [String]
@@ -38,32 +39,22 @@ main =
 		(	return ())
 	)											>>|
 	printAll sErrors							>>|
-	print "Tokens:"								>>|
-	printAll tokens								>>|
+//	print "Tokens:"								>>|
+//	printAll tokens								>>|
 	print "Parsing..."							>>|
-	let (syntaxTrees, pErrors) = parser tokens in
-	(if (not (isEmpty pErrors))
-		(	print "Parser Errors:" >>| printAll pErrors)
-		(	return ())
-	)											>>|
-	(if (not (isEmpty syntaxTrees))
-		(	let result = hd syntaxTrees in
-			print "first syntax tree"		>>|
-			printAll (fst result)			>>|
-			print "tokens left:"			>>|
-			printAll (snd result)			>>|
-			print "Pretty print:"			>>|
-			print (prettyPrint (fst result))	)
-		(	print "No syntax trees"				)
-	)											>>|
-	print ("Nr of derivations: " +++ (toString (length syntaxTrees))) >>|
-	
-	print "end"
+	case parser tokens of
+		(Left pErrors) = print "Parser Errors:" >>| printAll pErrors
+		(Right ast)
+				=
+					print "Syntax tree"			>>|
+					printAll ast					>>|
+					print "Pretty print:"			>>|
+					print (prettyPrint ast)
 
 import GenString
 import StdOverloaded
 derive gString Decl, FunDecl, VarDecl, Type, Stmt, Maybe, Expr, BasicType, FunCall,
-	IdWithFields, UnOp, BinOp, Field
+	IdWithFields, UnOp, BinOp, Field, MetaData
 
 instance toString Decl where toString d = gString{|*|} d
 

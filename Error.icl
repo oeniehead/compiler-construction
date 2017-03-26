@@ -4,6 +4,9 @@ import GenString
 import Misc
 import CustomStdEnv
 
+makeError :: Position Severity Stage String -> Error
+makeError p sev stage msg = {pos=p, severity=sev, stage=stage, message=msg}
+
 derive gString Stage, Severity
 
 instance toString Error		where

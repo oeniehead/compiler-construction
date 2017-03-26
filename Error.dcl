@@ -12,6 +12,8 @@ import CustomStdEnv
 	, message	:: String
 	}
 
+makeError :: Position Severity Stage String -> Error
+
 :: Severity
 	= FATAL
 	| ERROR

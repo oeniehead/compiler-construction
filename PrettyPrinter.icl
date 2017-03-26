@@ -82,12 +82,12 @@ instance toShow Type where
 	toShow type = toShow` type False
 	where
 		toShow` :: Type Bool -> Show // Bool indicates if brackets might be needed
-		toShow` (BasicType type _) _				= toShow type
-		toShow` (TupleType typeA typeB _) _		= rtrn "(" + toShow typeA + rtrn ", " + toShow typeB + rtrn ")"
-		toShow` (ArrayType type _) _				= rtrn "[" + toShow type + rtrn "]"
-		toShow` (IdentType id _) _				= rtrn id
+		toShow` (BasicType type) _				= toShow type
+		toShow` (TupleType typeA typeB) _		= rtrn "(" + toShow typeA + rtrn ", " + toShow typeB + rtrn ")"
+		toShow` (ArrayType type) _				= rtrn "[" + toShow type + rtrn "]"
+		toShow` (IdentType id) _				= rtrn id
 		toShow` funcType				 True	= rtrn "(" + toShow` funcType False + rtrn ")"
-		toShow` (FuncType args mType _)	 False	= concatArgs args + rtrn " -> " + 
+		toShow` (FuncType args mType)	 False	= concatArgs args + rtrn " -> " + 
 													case mType of
 														Nothing	= rtrn "Void"
 														Just t	= toShow` t False
@@ -107,9 +107,9 @@ instance toShow Field where
 	toShow FieldSnd = rtrn ".snd"
 
 instance toShow BasicType where
-	toShow (IntType  _)	= rtrn "Int"
-	toShow (BoolType _) = rtrn "Bool"
-	toShow (CharType _) = rtrn "Char"
+	toShow (IntType)	= rtrn "Int"
+	toShow (BoolType)	= rtrn "Bool"
+	toShow (CharType)	= rtrn "Char"
 
 instance toShow BinOp where
 	toShow OpPlus 	= rtrn " + "

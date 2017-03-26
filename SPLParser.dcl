@@ -31,16 +31,16 @@ instance zero MetaData
 
 // -- Types
 :: Type
-	= BasicType BasicType			Position
-	| TupleType Type Type			Position
-	| ArrayType Type 				Position
-	| IdentType Id					Position
-	| FuncType [Type] (Maybe Type)	Position // list of arguments and return type(voor verslag)
+	= BasicType BasicType
+	| TupleType Type Type
+	| ArrayType Type
+	| IdentType Id
+	| FuncType [Type] (Maybe Type) // list of arguments and return type(voor verslag)
 
 :: BasicType
-	= IntType	Position
-	| BoolType	Position
-	| CharType	Position
+	= IntType
+	| BoolType
+	| CharType
 
 // -- Statement
 

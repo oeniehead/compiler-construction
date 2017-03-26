@@ -115,41 +115,39 @@ parseIds = (
 				)
 
 parseFunType :: Parser Token Type
-parseFunType = withPos							\pos.
+parseFunType =
 	pMany parseType							>>= \argTypes.
 	pSatisfyTokenType TypeArrow				>>|
 	(
 			( pSatisfyStringToken ["Void"] >>|
-			  pYield (FuncType argTypes Nothing		   pos) )
+			  pYield (FuncType argTypes Nothing		   ) )
 		<<|>
 			( parseType	>>= \retType.
-			  pYield (FuncType argTypes (Just retType) pos) )
+			  pYield (FuncType argTypes (Just retType) ) )
 	)
 
 parseType :: Parser Token Type
-parseType = withPos (\pos.
-	pBasicType pos <<|> pTupleType pos <<|> pArrayType pos <<|> pIdentType pos
-	)
+parseType = pBasicType <<|> pTupleType <<|> pArrayType <<|> pIdentType
 where
-	pBasicType pos = BasicType <$> parseBasicType <*> return pos
-	pTupleType pos =
+	pBasicType = BasicType <$> parseBasicType
+	pTupleType =
 		pSatisfyBrace Open Round	>>|
 		parseType					>>= \t1.
 		pSatisfyTokenType Comma		>>|
 		parseType					>>= \t2.
 		pSatisfyBrace Close Round	>>|
-		return (TupleType t1 t2 pos)
-	pArrayType pos =
-		ArrayType <$> pBetweenBrackets Square parseType <*> return pos
-	pIdentType pos = IdentType <$> parseId <*> return pos
+		return (TupleType t1 t2)
+	pArrayType =
+		ArrayType <$> pBetweenBrackets Square parseType
+	pIdentType = IdentType <$> parseId
 
 parseBasicType :: Parser Token BasicType
-parseBasicType = withPos 							\pos.
+parseBasicType =
 	pSatisfyStringToken ["Int","Bool","Char"]	>>= \(Token _ string _).
 	case string of
-		"Int"	= return (IntType	pos)
-		"Bool"	= return (BoolType	pos)
-		"Char"	= return (CharType	pos)
+		"Int"	= return IntType
+		"Bool"	= return BoolType
+		"Char"	= return CharType
 
 parseStmt :: Parser Token Stmt
 parseStmt = parseStmtIf <<|>

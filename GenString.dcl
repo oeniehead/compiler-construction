@@ -1,6 +1,7 @@
 definition module GenString
 
 import StdGeneric
+from Data.Maybe import :: Maybe
 
 // Based on GenEq.icl
 
@@ -11,3 +12,4 @@ derive gString Int, Char, Bool, Real, String, UNIT, PAIR, EITHER, CONS of c, REC
 
 // standard types
 derive gString [], (,), (,,), (,,,)
+derive gString Maybe

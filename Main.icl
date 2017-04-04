@@ -5,10 +5,10 @@ import System.IO
 import Control.Monad
 import Control.Applicative
 import Data.Functor
+import Data.List
 import StdGeneric
 
 import CustomStdEnv
-
 
 import Scanner
 import SPLParser
@@ -53,8 +53,6 @@ main =
 
 import GenString
 import StdOverloaded
-derive gString Decl, FunDecl, VarDecl, Type, Stmt, Maybe, Expr, BasicType, FunCall,
-	IdWithFields, UnOp, BinOp, Field, MetaData
 
 instance toString Decl where toString d = gString{|*|} d
 

@@ -2,7 +2,7 @@ implementation module GenString
 
 import StdGeneric
 import CustomStdEnv
-
+import StdList
 
 generic gString a  :: a -> String
 gString{|Int|} 	x						= toString x
@@ -25,6 +25,8 @@ gString{|(,)|}   fx fy    (x,y)			= "(" +++ (fx x) +++ "," +++ (fy y) +++ ")"
 gString{|(,,)|}  fx fy fz (x,y,z)		= "(" +++ (fx x) +++ "," +++ (fy y) +++ "," +++ (fz z) +++ ")"
 gString{|(,,,)|} fx fy fz fu (x,y,z,u)	= "(" +++ (fx x) +++ "," +++ (fy y) +++ "," +++ (fz z) +++ "," +++ (fu u) +++ ")"
 gString{|[]|}  f l				= "[" +++ (delimit (map f l) ",") +++ "]"
+
+derive gString Maybe
 
 concat :: [String] -> String
 concat l = foldr (+++) "" l

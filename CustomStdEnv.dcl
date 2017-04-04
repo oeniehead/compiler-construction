@@ -5,17 +5,17 @@ import
 	StdInt,
 	StdReal,
 	StdChar,
-//	StdArray, name clash met Data.Set, importeer waar nodig
+//	StdArray, //name clash met Data.Set
 	StdString,
 	StdFile,
 
 	StdClass,
 
-	StdList,
+//	StdList, //name clash met Data.Set
 	StdOrdList,
 	StdTuple,
 	StdCharList,
-//	StdFunc, name clash met return
+//	StdFunc, //name clash met return
 	StdMisc,
 
 	StdEnum

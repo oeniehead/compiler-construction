@@ -3,6 +3,7 @@ implementation module PrettyPrinter
 import Indentation
 import SPLParser
 import Misc
+import Data.List
 
 prettyPrint :: a -> String | toShow a
 prettyPrint item = show (toShow item)

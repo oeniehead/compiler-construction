@@ -7,7 +7,9 @@ import Control.Monad
 import Data.Either
 import Data.Func
 import Data.Functor
-import Data.List
+//import Data.List
+import StdList
+from StdClass import class Eq
 from StdFunc import o, const
 import Error
 
@@ -110,8 +112,8 @@ pGetPos = Parser (\tokens ->
 
 
 // -- Derived convenience parsers
-(@!) infixr 4 :: (Parser t a) Error -> Parser t a
-(@!) p err = p <<|> pError err
+(@!!) infixr 4 :: (Parser t a) Error -> Parser t a
+(@!!) p err = p <<|> pError err
 
 (<$) infixl 6 :: a (Parser t b) -> Parser t a
 (<$) x p = pMap (const x) p
@@ -142,7 +144,10 @@ pOptional :: (Parser s r) (r -> Parser s r) -> Parser s r
 pOptional p1 p2 = p1 >>= \r -> p2 r <<|> pure r
 
 pOneOf :: [t] -> Parser t t | == t
-pOneOf ts = pSatisfy (\x -> elem x ts)
+pOneOf ts = pSatisfy (\x -> elem` x ts)
+where
+	elem` _ []       = False
+	elem` x [y:ys]   = x == y || elem` x ys
 
 pChainl :: (Parser t a) (Parser t (a a -> a)) a -> Parser t a
 pChainl p op a = pChainl1 p op <|> pure a

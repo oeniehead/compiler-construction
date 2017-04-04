@@ -5,7 +5,7 @@ import SPLParser
 import Misc
 
 prettyPrint :: a -> String | toShow a
-prettyPrint item = show (toShow item)
+prettyPrint item = show2string (toShow item)
 
 concat :: [a] Show -> Show | toShow a
 concat [] 		_ = zero
@@ -24,7 +24,7 @@ instance toShow Decl where
 	
 instance toShow VarDecl where
 	toShow (VarDecl mType id expr _) = 
-		typeShow + rtrn id + rtrn " = " + toShow expr + rtrn ";"
+		typeShow + toShow id + rtrn " = " + toShow expr + rtrn ";"
 	where
 		typeShow = case mType of
 			(Just type)	= toShow type + rtrn " "
@@ -32,7 +32,7 @@ instance toShow VarDecl where
 			
 instance toShow FunDecl where
 	toShow (FunDecl id args mType varDecls stmts _) =
-		rtrn id + rtrn "( " + concat args (rtrn ", ") + rtrn " )" + type + nl + rtrn "{" + 
+		toShow id + rtrn "( " + concat args (rtrn ", ") + rtrn " )" + type + nl + rtrn "{" + 
 			( indentBlock (
 				(concat varDecls nl) + separator + (concat stmts (nl)) 
 			)) + rtrn "}" 
@@ -42,8 +42,8 @@ instance toShow FunDecl where
 			Nothing		= zero
 		separator = if (length varDecls * length stmts > 0) (nl) (zero)
 	
-instance toShow Arg where
-	toShow a	= rtrn a
+//instance toShow Arg where
+//	toShow a	= rtrn a
 		
 instance toShow Stmt where
 	toShow (StmtIf cond stmtA mStmtB _) = rtrn "if ( " + toShow cond + rtrn " ) {" + 
@@ -76,7 +76,7 @@ instance toShow Expr where
 	toShow (ExpTuple exprA exprB _) = rtrn "(" + toShow exprA + rtrn ", " + toShow exprB + rtrn ")"
 	
 instance toShow FunCall where
-	toShow (FunCall id args _) = rtrn id + rtrn "(" + concat args (rtrn ", ") + rtrn ")"
+	toShow (FunCall id args _) = toShow id + rtrn "(" + concat args (rtrn ", ") + rtrn ")"
 
 instance toShow Type where
 	toShow type = toShow` type False
@@ -85,7 +85,7 @@ instance toShow Type where
 		toShow` (BasicType type) _				= toShow type
 		toShow` (TupleType typeA typeB) _		= rtrn "(" + toShow typeA + rtrn ", " + toShow typeB + rtrn ")"
 		toShow` (ArrayType type) _				= rtrn "[" + toShow type + rtrn "]"
-		toShow` (IdentType id) _				= rtrn id
+		toShow` (IdentType id) _				= toShow id
 		toShow` funcType				 True	= rtrn "(" + toShow` funcType False + rtrn ")"
 		toShow` (FuncType args mType)	 False	= concatArgs args + rtrn " -> " + 
 													case mType of
@@ -98,7 +98,7 @@ instance toShow Type where
 
 instance toShow IdWithFields where
 	toShow (WithField id field _) = (toShow id) + (toShow field)
-	toShow (JustId id _) 			= rtrn id
+	toShow (JustId id _) 			= toShow id
 				
 instance toShow Field where
 	toShow FieldHd = rtrn ".hd"
@@ -130,3 +130,6 @@ instance toShow BinOp where
 instance toShow UnOp where
 	toShow OpNot = rtrn "!"
 	toShow OpNeg = rtrn "-"
+
+instance toShow Id where
+	toShow (Id id) = rtrn id

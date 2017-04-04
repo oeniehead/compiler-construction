@@ -99,4 +99,14 @@ instance zero MetaData
 	| FieldFst
 	| FieldSnd
 
-:: Id :== String
+:: Id = Id String
+
+// -- Testing
+import TestTooling
+
+derive ggen		MetaData, Decl, VarDecl, FunDecl, Type, BasicType, Stmt,
+				Expr, FunCall, BinOp, UnOp, IdWithFields, Field
+derive genShow	MetaData, Decl, VarDecl, FunDecl, Type, BasicType, Stmt,
+				Expr, FunCall, BinOp, UnOp, IdWithFields, Field
+
+SPLParserTests :: [String]

@@ -32,3 +32,12 @@ concat l = foldr (+++) "" l
 
 delimit :: [String] String -> String
 delimit strings del = concat (strings separatedBy del)
+
+// -- Testing
+import TestTooling
+
+derive ggen		Position
+derive genShow	Position
+
+
+

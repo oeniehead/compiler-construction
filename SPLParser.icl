@@ -16,7 +16,7 @@ instance zero MetaData where
 		   }
 
 withPos :: (Position -> Parser Token a) -> Parser Token a
-withPos f = (pGetPos >>= f) @! (makeError zero FATAL Parsing "Failed to determine current position")
+withPos f = (pGetPos >>= f) @!! (makeError zero FATAL Parsing "Failed to determine current position")
 
 withMeta :: (MetaData -> Parser Token a) -> Parser Token a // make a MetaData with current pos and no type information
 withMeta f = withPos (\p. f {pos = p, type = Nothing})
@@ -209,7 +209,7 @@ parseFunCall :: Parser Token FunCall
 parseFunCall = withMeta							\meta.
 		pSatisfyTokenType StringToken		>>= \(Token StringToken name _).
 		pBetweenBrackets Round parseActArgs	>>= \args.
-		pYield (FunCall name args meta)
+		pYield (FunCall (Id name) args meta)
 
 parseActArgs :: Parser Token [Expr]
 parseActArgs =
@@ -449,12 +449,30 @@ parseId :: Parser Token Id
 parseId = pSatisfy (\t. case t of
 							(Token StringToken _ _) = True
 							(Token _ _ _)		 	= False)
-			>>= (\(Token StringToken s _). pYield s)
+			>>= (\(Token StringToken s _). pYield (Id s))
 
 
+// -- Testing
+import TestTooling
 
+ggen{|MetaData|}	_ = [zero]
+ggen{|Id|}			_ = map Id ["a","b","c","d"]
+/*ggen{|FunDecl|}		st = [FunDecl id args mType vardecl /
+								id <- ggen{|*|} st,
+								args <- ...
+								| not (stmts == []) ]
+*/
+derive ggen		Decl, VarDecl, FunDecl, Type, BasicType, Stmt,
+				Expr, FunCall, BinOp, UnOp, IdWithFields, Field
+derive genShow	MetaData
+derive genShow	Id
+//genShow{|Decl|} _ _ decls xs = prettyPrint decls ++ xs]
+derive genShow	Decl
+derive genShow	VarDecl, FunDecl, Type, BasicType, Stmt,
+				Expr, FunCall, BinOp, UnOp, IdWithFields, Field
 
-
+SPLParserTests :: [String]
+SPLParserTests = []
 
 
 

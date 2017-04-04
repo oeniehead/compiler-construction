@@ -14,8 +14,8 @@ import Misc
 sh0 =	{ print  = []
 		, indent = 0 }
 
-show :: Show -> String
-show (Show sh) = foldl (+++) "" (reverse (sh sh0).print)
+show2string :: Show -> String
+show2string (Show sh) = foldl (+++) "" (reverse (sh sh0).print)
 
 rtrn :: String -> Show
 rtrn s = Show \sh -> {sh & print = [s:sh.print]}

@@ -63,4 +63,47 @@ printAll [a:as] = print a >>| (printAll as)
 printAll []	  = return ()
 
 
-Start w = execIO main w
+//Start w = execIO main w
+
+//////////////
+
+//from gast import class gast
+import MersenneTwister
+import gen
+import GenEq
+import genLibTest
+import testable
+//import confSM
+import stdProperty
+
+derive bimap []
+
+ggen{|MetaData|} _ = [zero]
+//ggen{|Id|} _ = ["a"]
+//derive ggen
+//	Token, TokenType, Position, BraceType, BraceStyle
+//derive gEq
+//	BasicType
+derive genShow
+	Token, TokenType, Position, BraceType, BraceStyle
+genShow{|Error|} _ _ e rest = [toString e: rest] 
+
+import StdArray
+
+(subStringOf) infix :: String String -> Bool
+(subStringOf) sub string =
+	if	(string == "")
+		(sub == "")
+		if	(sub == string % (0,size sub - 1) )
+			True
+			(sub subStringOf (string % (1,size string - 1) ) )
+
+prop_scanner :: String -> Property
+prop_scanner input =
+	(not (isEmpty errors)) ==> (
+			("&" subStringOf input) || ("|" subStringOf input)
+	)
+where (tokens, errors) = scanner input
+
+Start = ttestn 1000 prop_scanner
+////////////////////

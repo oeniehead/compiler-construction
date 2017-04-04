@@ -32,7 +32,7 @@ pError		:: Error -> Parser t a
 pGetPos		:: Parser Token Position
 
 // Derived convenience parsers
-(@!) infixr 4 :: (Parser t a) Error -> Parser t a
+(@!!) infixr 4 :: (Parser t a) Error -> Parser t a
 (<$) infixl 6 :: a (Parser t b) -> Parser t a
 ($>) infixl 6 :: (Parser t b) a -> Parser t a
 

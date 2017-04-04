@@ -9,7 +9,7 @@ import StdOverloaded
 
 :: Show
 
-show :: Show -> String
+show2string :: Show -> String
 
 rtrn		:: String -> Show
 indent		:: 			 Show //increase the internal indentation by one

@@ -21,3 +21,9 @@ toBeImplemented :: .a
 concat :: [String] -> String
 (separatedBy) infixl :: [a] a -> [a] // [1,2,3] separatedBy 0 = [1,0,2,0,3]
 delimit :: [String] String -> String // delimit ["a", "b"] ", " = "a, b"
+
+// -- Testing
+import TestTooling
+
+derive ggen		Position
+derive genShow	Position

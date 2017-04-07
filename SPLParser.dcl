@@ -18,6 +18,8 @@ parser :: [Token] -> Either [Error] AST
 
 instance zero MetaData
 
+setMetaType :: MetaData Type -> MetaData
+
 // -- Declarations
 :: Decl
 	= Var VarDecl		MetaData

@@ -16,6 +16,9 @@ instance zero MetaData where
 		   , type = Nothing
 		   }
 
+setMetaType :: MetaData Type -> MetaData
+setMetaType meta type = {meta & type = Just type}
+
 derive gEq		MetaData, Decl, VarDecl, FunDecl, Type, BasicType,
 				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field
 derive gString 	MetaData, Decl, VarDecl, FunDecl, Type, BasicType,

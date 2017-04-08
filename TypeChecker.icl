@@ -20,10 +20,11 @@ import StdDebug
 import qualified Data.Map as m
 
 :: TypeScheme = TS (Set Id) Type // the type with the bounded variables
+:: Subst	:== Id -> Type // Type substitutions assign types to type variables
+
 :: Env = { varTypes		:: Id -> Type
 		 , funcTypes	:: Id -> Type
 		 }
-:: Subst	:== Id -> Type // Type substitutions assign types to type variables
 
 // Is t1 less specific than or as specific as t2?
 (leq) infix 4 :: Type Type -> Bool
@@ -37,6 +38,19 @@ class (^^) infixr 8 a :: a Subst -> a //Map a substitution over a type
 
 // Hiding the actual substitution types:
 
+instance ^^ TypeScheme where
+	(^^) (TS boundedVars type) subst = TS boundedVars type` where
+		type` = case type of
+			IdentType id	= if (member id boundedVars) (IdentType id) (subst id) // Don't substitute the bounded type variables
+			BasicType b		= BasicType b
+			TupleType t1 t2	= TupleType (t1 ^^ subst) (t2 ^^ subst)
+			ArrayType t		= ArrayType (t ^^ subst)
+			FuncType args r = FuncType (map (\arg.arg ^^ subst) args) (mapMaybe (\type.type ^^ subst) r)
+
+//instance ^^ Type where
+//	(^^) type subst = type`
+//		where TS _ type` = (TS [] type) ^^ subst
+
 instance ^^ Type where
 	(^^) type subst = case type of
 		IdentType id	= subst id
@@ -44,6 +58,7 @@ instance ^^ Type where
 		TupleType t1 t2	= TupleType (t1 ^^ subst) (t2 ^^ subst)
 		ArrayType t		= ArrayType (t ^^ subst)
 		FuncType args r = FuncType (map (\arg.arg ^^ subst) args) (mapMaybe (\type.type ^^ subst) r)
+
 
 // Hiding the actual environment type:
 
@@ -241,17 +256,26 @@ instance Functor MMonad where
 	fmap f ma = mAp (return f) ma
 
 
-// The actual M function
-// @param Env:		The environment built up so far
-// @param a:		The part from the AST to type-check
-// @param Type:		The current information known from the context
-// @return:			An MMonad with either
-// 					- a substitution and the AST with updated type information
-//					- 
+// Two type classes for the actual M function. 
+// The first one is to be used if the AST object has a type. The second one is to be used if 
+// the AST object does not have a type. (statements, declarations)
+
+// @param env:		The environment built up so far
+// @param a:		The AST object to type-check
+// @param type:		The current information known from the context, if this AST object has a type
+// @return:			An MMonad with:
+//					- the AST with updated type information in the metadata
+// 					- a substitution such that the object has the type type ^^ subst in env ^^ subst
+//					MMonad fails or gives an error if the type inference fails
 class matchT a :: Env a Type -> MMonad (Subst, a)
 
-// A version of match for when you don't have any information about the type
-class match a :: Env a -> MMonad (Subst, a)
+// @param env:		The environment built up so far
+// @param a:		The AST object to type-check
+// @return:			An MMonad with:
+//					- the AST with updated type information in the metadata
+// 					- the environment with the type of the functions, variables added
+//					MMonad fails or gives an error if the type inference fails
+class match a :: Env a -> MMonad (Env, a)
 
 instance matchT Expr where
 	matchT env expr t = case expr of
@@ -272,46 +296,46 @@ instance matchT Expr where
 //instance matchT FunCall where
 
 //instance matchT IdWithFields where
-
-matchFunDecl :: Env FunDecl -> MMonad (Env, FunDecl)
-matchFunDecl env f=:(FunDecl name args (Just fType=:(FuncType argTypes _)) varDecls stmts meta) =
-	let env2 = setFuncType env name fType				in			// Set the specified type in the environment
-	let env3 = setArgTypes env2 args argTypes			in			// Set the specified types of the arguments in the environment
-	matchT env3 f fType							>>= \(subst,f`).	// Do the type inference for the body, setting the types in the metadata of the AST
-	let derivedFuncType = fType ^^ subst				in			
-	let derivedArgTypes = map (\at.at ^^ subst) argTypes	in
-	if	(derivedFuncType === fType && derivedArgTypes === argTypes)		// The specified types may not be changed during traversal,
-																		// else the function type defined is too general
-			(return (env2, f`))										// Return the environment, omitting the types of the arguments of the function
-			(error meta.MetaData.pos ("Specified type is to general: derived type is " <+++ derivedFuncType))
-	where
-		setArgTypes :: Env [Id] [Type] -> Env
-		setArgTypes env [arg:args] [type:types] = setArgTypes (setVarType env arg type) args types
-		setArgTypes env _ 			_			= env
-matchFunDecl env f=:(FunDecl name args Nothing varDecls stmts meta) =
-	withFreshVar								\fresh.				// Make a fresh type variable for the function
-	let env2 = setFuncType env name (IdentType fresh)	in			// Set the type of this function to the new type variable in the environment
-	withFreshVars_ env args					>>= \env3.				// Do the same for all arguments
-	matchT env3 f (IdentType fresh)			>>= \(subst, f`).		// Do the type inference for the body, setting the types in the metadata of the AST
-	return (env2, f`)												// Return the environment, omitting the types of the arguments of the function
-	where
-		withFreshVars_ :: Env [Id] -> MMonad Env
-		withFreshVars_ env [arg:args] = withFreshVar \type.withFreshVars_ (setVarType env arg (IdentType type)) args
-		withFreshVars_ env []		  = return env
+instance match FunDecl where
+	match :: Env FunDecl -> MMonad (Env, FunDecl)
+	match env f=:(FunDecl name args (Just fType=:(FuncType argTypes _)) varDecls stmts meta) =
+		let env2 = setFuncType env name fType				in			// Set the specified type in the environment
+		let env3 = setArgTypes env2 args argTypes			in			// Set the specified types of the arguments in the environment
+		matchT env3 f fType							>>= \(subst,f`).	// Do the type inference for the body, setting the types in the metadata of the AST
+		let derivedFuncType = fType ^^ subst				in			
+		let derivedArgTypes = map (\at.at ^^ subst) argTypes	in
+		if	(derivedFuncType === fType && derivedArgTypes === argTypes)		// The specified types may not be changed during traversal,
+																			// else the function type defined is too general
+				(return (env2, f`))										// Return the environment, omitting the types of the arguments of the function
+				(error meta.MetaData.pos ("Specified type is to general: derived type is " <+++ derivedFuncType))
+		where
+			setArgTypes :: Env [Id] [Type] -> Env
+			setArgTypes env [arg:args] [type:types] = setArgTypes (setVarType env arg type) args types
+			setArgTypes env _ 			_			= env
+	match env f=:(FunDecl name args Nothing varDecls stmts meta) =
+		withFreshVar								\fresh.				// Make a fresh type variable for the function
+		let env2 = setFuncType env name (IdentType fresh)	in			// Set the type of this function to the new type variable in the environment
+		withFreshVars_ env args					>>= \env3.				// Do the same for all arguments
+		matchT env3 f (IdentType fresh)			>>= \(subst, f`).		// Do the type inference for the body, setting the types in the metadata of the AST
+		return (env2, f`)												// Return the environment, omitting the types of the arguments of the function
+		where
+			withFreshVars_ :: Env [Id] -> MMonad Env
+			withFreshVars_ env [arg:args] = withFreshVar \type.withFreshVars_ (setVarType env arg (IdentType type)) args
+			withFreshVars_ env []		  = return env
 
 instance matchT FunDecl where
 	matchT :: Env FunDecl Type -> MMonad (Subst, FunDecl)
 	matchT env f=:(FunDecl name args mType [varDecl:varDecls] stmts meta) t =
-		matchVarDecl env varDecl										>>= \(env2, varDecl).
+		match env varDecl										>>= \(env2, varDecl).
 		matchT env2 (FunDecl name args mType varDecls stmts meta) t		>>= \(subst, (FunDecl name2 args2 mType2 varDecls2 stmts2 meta2)). // The updated type information
 		let env3 = env2 ^^ subst in
 		return (subst, FunDecl name2 args2 mType2 varDecls2 stmts2 meta2)
 	matchT env f=:(FunDecl name args mType [] [stmt:stmts] meta) t =
 		toBeImplemented
 
-	
-matchVarDecl :: Env VarDecl -> MMonad (Env, VarDecl)
-matchVarDecl _ _ = toBeImplemented
+instance match VarDecl where
+	match :: Env VarDecl -> MMonad (Env, VarDecl)
+	match  _ _ = toBeImplemented
 
 
 

@@ -25,6 +25,7 @@ makeError :: Position Severity Stage String -> Error
 :: Stage
 	= Scanning
 	| Parsing
+	| Binding
 	| TypeChecker
 	// etc.
 

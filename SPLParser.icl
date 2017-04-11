@@ -45,27 +45,6 @@ pBetweenBrackets bstyle parse = pSatisfyBrace Open bstyle *> parse <* pSatisfyBr
 parser :: [Token] -> Either [Error] AST
 parser tokens = parse parseAST tokens
 
-funType = [
-	(Token StringToken "tempDay" {line=21 ,col=31}),
-	(Token Operator "-" {line=21 ,col=39}),
-	(Token Operator "-" {line=21 ,col=41}),
-	(Token Operator "-" {line=21 ,col=43}),
-	(Token Operator "-" {line=21 ,col=45}),
-	(Token Operator "-" {line=21 ,col=47}),
-	(Token StringToken "dcLengthOfMonth" {line=21 ,col=49})
-	]
-
-pars :: Parser Token [Expr]
-pars =
-		(parseExp										>>= \e.
-		pMany (pSatisfyTokenType Comma >>| parseExp)	>>= \es.
-		return [e:es])
-	<<|>
-		(return [])
-
-//Start = runParser pars funType 
-
-
 parseAST :: Parser Token AST
 parseAST =	pMany parseDecl				>>= \decls.
 			pSatisfyTokenType EOFToken	>>|

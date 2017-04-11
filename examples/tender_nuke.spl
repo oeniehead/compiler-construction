@@ -1,0 +1,25 @@
+c (x, y)
+{
+	if(x < y) {
+		return x;
+	}
+	else {
+		return x;
+	}
+}
+
+b (a, b)
+{
+	if(a < b) {
+		return b;
+	}
+	else {
+		return c(a - b, b - a);
+	}
+}
+
+var a = b(2,3);
+var e = c(a, b(1, 2));
+
+
+

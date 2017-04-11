@@ -6,6 +6,7 @@ import Control.Monad
 import Control.Applicative
 import Data.Functor
 import StdGeneric
+import GenString
 
 import CustomStdEnv
 
@@ -16,6 +17,7 @@ import Error
 import Misc
 import PrettyPrinter
 import Data.Either
+import BindingAnalysis
 
 
 getCl :: IO [String]
@@ -47,9 +49,17 @@ main =
 		(Right ast)
 				=
 					print "Syntax tree"			>>|
-					printAll ast					>>|
-					print "Pretty print:"			>>|
-					print (prettyPrint ast)
+					printAll ast				>>|
+					print "Pretty print:"		>>|
+					print (prettyPrint ast)		>>|
+					print "Binding:"			>>|
+					return (doBindingAnalysis ast) >>= \result.
+					case result of
+						(Right bErrors) = print "Binding Errors:" >>| printAll bErrors
+						(Left ast)		= print (prettyPrint ast)
+					
+					
+	
 
 import GenString
 import StdOverloaded

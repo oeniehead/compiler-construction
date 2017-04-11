@@ -5,10 +5,11 @@ import SPLParser
 import StdGeneric
 import GenString
 import Error
+import StdList
 
 import Data.Either
 
-derive gString OrderItem, Error, Maybe, Signature
+derive gString OrderItem, Error, Signature
 derive gEq OrderItem
 instance toString OrderItem where toString x = gString{|*|} x
 instance toString OrderGraph where toString x = gString{|*|} x

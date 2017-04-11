@@ -8,12 +8,18 @@ import Control.Applicative
 import Control.Monad
 
 import StdArray
+import Data.List
 from Data.Either import :: Either
 
 instance zero MetaData where
 	zero = { pos  = zero
 		   , type = Nothing
 		   }
+
+derive gEq		MetaData, Decl, VarDecl, FunDecl, Type, BasicType,
+				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field
+derive gString 	MetaData, Decl, VarDecl, FunDecl, Type, BasicType,
+				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field
 
 withPos :: (Position -> Parser Token a) -> Parser Token a
 withPos f = (pGetPos >>= f) @! (makeError zero FATAL Parsing "Failed to determine current position")

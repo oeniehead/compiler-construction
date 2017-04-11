@@ -4,6 +4,8 @@ import Token
 import Misc
 import Error
 from Data.Either import :: Either
+import GenEq
+import GenString
 
 parser :: [Token] -> Either [Error] AST
 
@@ -100,3 +102,10 @@ instance zero MetaData
 	| FieldSnd
 
 :: Id :== String
+
+derive gEq		MetaData, Decl, VarDecl, FunDecl, Type, BasicType,
+				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field
+derive gString 	MetaData, Decl, VarDecl, FunDecl, Type, BasicType,
+				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field
+
+

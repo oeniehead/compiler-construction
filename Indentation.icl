@@ -5,6 +5,7 @@ implementation module Indentation
 */
 
 import CustomStdEnv
+import Data.List
 import StdOverloaded
 import Misc
 

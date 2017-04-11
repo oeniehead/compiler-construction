@@ -5,6 +5,7 @@ from StdOverloaded import class zero
 import CustomStdEnv
 import GenString
 import GenEq
+import Data.List
 
 nextPos :: Position Char -> Position
 nextPos {line, col} c = case c of

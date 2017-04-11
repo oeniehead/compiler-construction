@@ -4,11 +4,11 @@ from StdOverloaded import class zero
 import CustomStdEnv
 import StdMaybe
 import Control.Monad
+import Data.List
+import StdArray
 import Token
 import Error
 import Misc
-
-import StdArray
 
 :: Scanner a = Scanner (ScannerState -> (a, ScannerState))
 :: ScannerState =	{ buffer	:: String

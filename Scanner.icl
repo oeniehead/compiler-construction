@@ -4,6 +4,7 @@ import Token
 import StringScanner
 import Misc
 import CustomStdEnv
+import Data.List
 
 
 scanner :: String -> ([Token], [Error])

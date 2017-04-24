@@ -19,8 +19,8 @@ instance toString Position	where toString p	= gString{|*|} p
 instance ==	Position		where == a b		= gEq{|*|} a b
 instance zero Position		where zero			= {line = 0, col = 0}
 
-toBeImplemented :: .a
-toBeImplemented = abort "Program evaluated unimplemented function"
+tbi :: .a
+tbi = abort "Program evaluated unimplemented function"
 
 concat :: [String] -> String
 concat l = foldr (+++) "" l

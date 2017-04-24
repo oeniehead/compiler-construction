@@ -16,7 +16,8 @@ instance zero		Position
 
 nextPos :: Position Char -> Position
 
-toBeImplemented :: .a
+toBeImplemented :== tbi
+tbi :: .a
 
 concat :: [String] -> String
 (separatedBy) infixl :: [a] a -> [a] // [1,2,3] separatedBy 0 = [1,0,2,0,3]

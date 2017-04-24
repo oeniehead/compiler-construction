@@ -46,6 +46,10 @@ setMetaType :: MetaData Type -> MetaData
 	| BoolType
 	| CharType
 
+bIntType  :== BasicType IntType
+bBoolType :== BasicType BoolType
+bCharType :== BasicType CharType
+
 // -- Statement
 
 :: Stmt

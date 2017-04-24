@@ -5,8 +5,9 @@ import SPLParser
 import Misc
 import Error
 import Spec
+import PrettyPrinter
 
-from StdList import and, all, zip
+from StdList import and, all, zip, ++, hd, isMember, zip2
 from Data.Func import $
 import Data.Set
 import Data.Either
@@ -19,29 +20,22 @@ import StdDebug
 
 import qualified Data.Map as m
 from Data.Map import instance Functor (Map k)
+:: Map a k :== 'm'.Map a k
 
-:: TypeScheme = TS (Set Id) Type // the type with the bounded variables
-:: Subst	:== Id -> Type // Type substitutions assign types to type variables
+:: TypeVar  :== Id
+:: TypeScheme = TS (Set TypeVar) Type // the type with the bounded variables
+:: Subst	:== TypeVar -> Type // Type substitutions assign types to type variables
 
-:: Env = { varTypes		:: 'm'.Map Id Type
-		 , funcTypes	:: 'm'.Map Id TypeScheme
+:: Env = { varTypes		:: 'm'.Map TypeVar Type
+		 , funcTypes	:: 'm'.Map TypeVar TypeScheme
 		 }
 
-tbi :== toBeImplemented
-
-// Is t1 more specific than t2?
-(moreSpecificThan) infix 4 :: Type Type -> Bool
-(moreSpecificThan) (IdentType _) (IdentType _) = False
-(moreSpecificThan) _			 (IdentType _) = True
-(moreSpecificThan) (TupleType t1 t2) (TupleType t1` t2`) = t1 moreSpecificThan t1` && t2 moreSpecificThan t2`
-(moreSpecificThan) (ArrayType t) (ArrayType t`) = t moreSpecificThan t`
-(moreSpecificThan) (FuncType a1 (Just r1)) (FuncType a2 (Just r2)) =
-						(all (\(x1,x2).x1 moreSpecificThan x2) (zip (a1,a2)))
-							&& r1 moreSpecificThan r2
-(moreSpecificThan) (FuncType a1 Nothing) (FuncType a2 Nothing) =
-						(all (\(x1,x2).x1 moreSpecificThan x2) (zip (a1,a2)))
-(moreSpecificThan) _ _ = trace_n "(moreSpecificThan) uncomparable types" False //This should never occur in this application
-
+instance toString TypeScheme where
+	toString (TS boundedVars t) =
+		"A." +++
+		(
+			concat ((toList boundedVars) separatedBy " ")
+		) +++ ":" +++ (prettyPrint t)
 
 class (^^) infixl 8 a :: a Subst -> a //Map a substitution over a type
 
@@ -54,7 +48,7 @@ class (^^) infixl 8 a :: a Subst -> a //Map a substitution over a type
 idSubst :: Subst //identity
 idSubst = \id -> IdentType id
 
-substitute :: Id Type -> Subst // Subsitute Id with Type and leave the rest the same
+substitute :: TypeVar Type -> Subst // Subsitute Id with Type and leave the rest the same
 substitute id type = \i2.if (i2 === id) type (IdentType i2)
 
 (O) infixr 9 :: Subst Subst -> Subst
@@ -119,7 +113,7 @@ instance ^^ Env where
 
 
 // Determining the free variables (TV in the slides)
-class freeVars a :: a -> Set Id
+class freeVars a :: a -> Set TypeVar
 instance freeVars Type where
 	freeVars type = case type of
 		BasicType _					= newSet
@@ -140,6 +134,59 @@ instance freeVars Env where		//Here you need the map type
 		(unions (map freeVars ('m'.elems varTypes)))
 		(unions (map freeVars ('m'.elems funcTypes)))
 
+class isConcrete a :: a -> Bool
+instance isConcrete Type where
+	isConcrete t = null (freeVars t)
+
+instance isConcrete TypeScheme where
+	isConcrete ts = null (freeVars ts)
+
+:: Renaming :== 'm'.Map TypeVar TypeVar
+
+// Gives a renaming r of type variables such that r t1 = t2, if possible
+class rename a :: a a -> Maybe Renaming
+instance rename Type where
+	rename t1 t2 = rename` t1 t2 'm'.newMap
+
+instance rename TypeScheme where
+	rename (TS bounded1 t1) (TS bounded2 t2) =
+		renameAll
+			[IdentType t \\ t <- toList bounded1]
+			[IdentType t \\ t <- toList bounded2] 'm'.newMap
+		>>= \e2.
+		rename` t1 t2 e2
+
+rename` :: Type Type Renaming -> Maybe Renaming
+rename` (BasicType b1) (BasicType b2) env = if (b1 === b2) (Just env) Nothing 
+rename` (TupleType t1 v1) (TupleType t2 v2) env =
+	rename` t1 t2 env	>>= \e2. rename` v1 v2 e2
+rename` (ArrayType t1) (ArrayType t2) env = rename` t1 t2 env
+rename` (IdentType id1) (IdentType id2) env =
+	case 'm'.get id1 env of
+		Just id2`	= if (id2 == id2`) (Just env) Nothing
+		Nothing		=
+			if (isMember id2 ('m'.elems env))
+				Nothing
+				(Just ('m'.put id1 id2 env))
+rename` (FuncType argTypes1 rType1) (FuncType argTypes2 rType2) env =
+	(case (rType1, rType2) of
+		(Nothing, Nothing)	= Just env
+		(Just r1, Just r2)	= rename` r1 r2 env
+		_					= Nothing
+	) >>= \e2.
+	renameAll argTypes1 argTypes2 e2
+rename` _ _ env = Nothing
+
+renameAll :: [Type] [Type] Renaming -> Maybe Renaming
+renameAll [t1:t1s] [t2:t2s] env =
+	rename` t1 t2 env >>= \e2.
+		renameAll t1s t2s e2
+renameAll [] [] env = Just env
+renameAll _ _ env = Nothing
+
+// Are t1 and t2 isomorphic? (That is, equivalent up to the renaming of type variables)
+isomorphic :: a a -> Bool | rename a
+isomorphic a b = isJust (rename a b)
 
 // --
 // -- Unification
@@ -179,6 +226,47 @@ where
 //unify _				_						= Nothing
 unify a b = /*trace_n ("cannot unify (" <+++ a <+++ ") and (" <+++ b <+++ ")" )*/ Nothing
 
+// Is there a substitution s such that t1 is isomorphic to t2 ^^ s?
+class (instanceOf) infix 4 a :: a a -> Bool
+instance instanceOf Type where
+	(instanceOf) t1 t2 = case unify t1 t2 of
+		Nothing	= False
+		Just s	= isomorphic t1 (t2 ^^ s)
+
+instance instanceOf TypeScheme where
+	(instanceOf) (TS bounded1 t1) (TS bounded2 t2) = case unify t1 t2 of
+		Nothing	= False
+		Just s	= isomorphic (TS bounded1 t1) ((TS bounded2 t2) ^^ s)
+
+instanceOf_tests =
+	[ Testcase "a b [(b,int)] -> ([a], (b,int)) instanceOf a b [c] -> ([a], c)" $
+		assert $ specificType instanceOf generalType
+	, Testcase "A.a:a b [(b,int)] -> ([a], (b,int)) instanceOf A.a:a b [c] -> ([a], c)" $
+		assert $ specificTypeScheme instanceOf generalTypeScheme
+	]
+where
+	specificType =
+		FuncType [ IdentType "a", IdentType "b", ArrayType (TupleType (IdentType "b") bIntType)]
+			(Just
+				(TupleType
+					(ArrayType (IdentType "a"))
+					(TupleType (IdentType "b") bIntType)
+				)
+			)
+	generalType =
+			FuncType [ IdentType "a", IdentType "b", ArrayType (IdentType "c")]
+				(Just
+					(TupleType
+						(ArrayType (IdentType "a"))
+						(IdentType "c")
+					)
+				)
+	specificTypeScheme	= TS (fromList ["a"]) specificType
+	generalTypeScheme	= TS (fromList ["a"]) generalType
+		
+
+// Testing unification
+
 instance toString Type where toString t = gString{|*|} t
 
 prop_unify :: Type Type -> Bool
@@ -191,25 +279,28 @@ prop_unify type1 type2 = case unify type1 type2 of
 (<+++) infixl 9 :: !String !a -> String | toString a
 (<+++) str x = str +++ toString x
 
-Start = runTests unify_tests
 unify_tests =
-	[ Testcase "\nSame Types:" $
+	[ Testcase "Same Types:" $
 		assert $ and [prop_unify x x \\ y <- [IntType, BoolType, CharType]
 									  , x <- [BasicType y, TupleType a b, ArrayType a,
 											  a, FuncType [a,b] Nothing, FuncType [] (Just a)]
 					 ]
-	, Testcase "\nDifferent IdentType:" $
+	, Testcase "Different IdentType:" $
 		assert $ prop_unify a b
-	, Testcase "\nUnifiable basic types:" $
+	, Testcase "Unifiable basic types:" $
 		assert $ not $ prop_unify (BasicType IntType) (BasicType BoolType)
-	, Testcase "\nUnifiable composite types:" $
+	, Testcase "Unifiable composite types:" $
 		assert $ prop_unify comp1 comp2
-	, Testcase "\nUnunifiable composite types:" $
+	, Testcase "Ununifiable composite types:" $
 		assert $ not $ prop_unify comp1 compBad
-	, Testcase "\nFunctype Return and no return:" $
+	, Testcase "Functype Return and no return:" $
 		assert $ not $ prop_unify compRet comp1
-	, Testcase "\nFunctype nr of arguments wrong:" $
+	, Testcase "Functype nr of arguments wrong:" $
 		assert $ not $ prop_unify compArg comp1
+	, Testcase "1" $
+		case unify (IdentType "i") bIntType of
+			Nothing = Failed "unification failed"
+			Just s  = ((IdentType "i") ^^ s) shouldBe bIntType 
 	]
 where
 	a = IdentType "a"
@@ -223,6 +314,7 @@ where
 	comp2	= FuncType [b,			 ArrayType (ArrayType d)	, b] (Just f)
 	compArg	= FuncType [TupleType a a, c						   ] (Just (BasicType IntType))
 	compRet	= FuncType [TupleType a a, c						, e] Nothing
+
 
 // --
 // -- The Match function (M in the slides)
@@ -240,7 +332,7 @@ where
 fail :: MMonad a
 fail = M \st.(Nothing,st)
 
-makeFreshVar :: MMonad Id
+makeFreshVar :: MMonad TypeVar
 makeFreshVar = M \st.(Just $ "%var" +++(toString st.counter), {st & counter=st.counter + 1})
 // The % is to avoid name clashes with the user defined type variables
 
@@ -266,7 +358,7 @@ setLabel :: String -> MMonad String
 setLabel s = M \st.(Just s,{st & label = s})
 
 getLabel :: MMonad String
-getLabel = M \st.(Just st.label,st)
+getLabel = M \st.(Just st.label,st)	
 
 mRun :: (MMonad a) -> (Maybe a, [Error])
 mRun (M ma) = let (maybeA, st) = ma {counter = 0, errors = [], label = "", env = newEnv, subst = idSubst} in (maybeA, st.errors)
@@ -278,12 +370,6 @@ mUnify t1 t2 = case unify t1 t2 of
 			changeEnv (\env. env ^^ subst)	>>|
 			addSubst subst
 	Nothing		= fail
-
-withFreshVar :: (Id -> MMonad a) -> MMonad a
-withFreshVar f = makeFreshVar >>= f
-
-withFreshIdentType :: (Type -> MMonad a) -> MMonad a
-withFreshIdentType f = makeFreshIdentType >>= f
 
 scope :: String (MMonad a) -> MMonad a
 scope s ma =
@@ -301,6 +387,12 @@ addFuncType id ts =
 	changeEnv (\env. {env & funcTypes = 'm'.put (label <+++ "@" <+++ id) ts env.funcTypes})
 				>>| return ts
 
+putId :: String Id t (Map Id t) -> Map Id t
+putId l name t typeMap = 'm'.put suffixedName t typeMap
+where
+	suffixedName = case l of
+		""	= name
+		_	= name +++ "@" +++ l
 
 getVarType :: Id -> MMonad Type
 getVarType id =
@@ -359,216 +451,389 @@ class match a :: a Type -> MMonad Subst
 //					- the AST with updated type information in the metadata
 // 					- the environment with the type of the functions, variables added
 //					MMonad fails or gives an error if the type inference fails
-//class matchN a :: Env a -> MMonad (Env, a)
+class matchN a :: a -> MMonad Subst
 
-/*
-match :: AST -> (Maybe (Env,Subst), [Error])
-match ast = mRun (match` newEnv ast idSubst)
-where
-	match` :: Env AST Subst -> MMonad (Env,Subst)
-	match` env [Fun (FunDecl name args Nothing varDecls stmts _) _:decls] subst =
-		makeNewTypeVariablesAndPutInEnvironment name args >>= \(fType, argTypes, env2).
-		matchBody varDecls stmts ... >>= \subst.
-		???*/
+// Thread the substitution of the first argument trough the arguments of the match
+// and deliver the composite substitution
+(>==) infixl 1 :: (MMonad Subst) (a, Type) -> MMonad Subst | match a
+(>==) m (a, t) =
+	m					>>= \s1.
+	match a (t ^^ s1)	>>= \s2.
+	return (s2 O s1)
 
-typeInference :: AST -> ((Maybe (AST, Subst)), [Error])
-typeInference ast = mRun (matchAST ast)
+matchAll :: [(a,Type)] -> MMonad Subst | match a
+matchAll list =
+	foldM (\subst (a,t) -> 
+			match a (t ^^ subst) >>= \s1.
+			return (s1 O subst))
+		idSubst list
 
-setType :: MetaData Type -> MetaData //verplaatsen naar SPLParser
-setType m t = {m & type = Just t}
+matchAllN :: [a] -> MMonad Subst | matchN a
+matchAllN list =
+	foldM (\subst a -> 
+			matchN a >>= \s1.
+			return (s1 O subst))
+		idSubst list
 
-matchAST :: AST -> MMonad (AST, Subst)
+typeInference :: AST -> ((Maybe Env), [Error])
+typeInference ast = mRun (matchAST ast >>| getEnv)
+
+//setType :: MetaData Type -> MetaData //verplaatsen naar SPLParser
+//setType m t = {m & type = Just t}
+
+matchAST :: AST -> MMonad Subst
 matchAST [Fun (FunDecl name args Nothing varDecls stmts m1) m2:decls] =
-	makeFreshIdentType							>>= \fType.
-	setLabel name								>>|	
-			forM args (\arg -> freshInEnv arg)	>>|
-			matchBody varDecls stmts decls name
-	) >>= (varDecls`, stmts`, decls`, subst).
-	addFuncType
-	return [Fun (FunDecl name args Nothing varDecls` stmts` (setType m1 (fType ^^ subst` ^^ subst))) _:decls]
-	
+	makeFreshIdentType									>>= \fType.
+	setLabel name										>>|	
+			forM args (\arg -> freshInEnv arg)			>>|
+			matchBody varDecls stmts decls name fType
 
-matchAST [Var (VarDecl Nothing name e meta) meta2:decls] =
+matchAST [Var (VarDecl Nothing name e m1) m2:decls] =
 	makeFreshIdentType					>>= \type.
 	match e type						>>= \subst.
 	addVarType name (type ^^ subst)		>>|
-	matchAST  decls						>>= \(decls`,subst`).
-	return	( [Var	(VarDecl Nothing name e (setType meta (type ^^ subst` ^^ subst)))
-					(setType meta2 (type ^^ subst` ^^ subst)):decls`]
-			, subst` O subst)
+	matchAST decls
 
-matchAST [] = return ([], idSubst)
+matchAST [] = getSubst//return idSubst
 
 freshInEnv :: Id -> MMonad Type
 freshInEnv arg =
 	makeFreshIdentType	>>= \t.
 	addVarType arg t
 
-matchBody :: [VarDecl] [Stmt] AST Id -> MMonad ([VarDecl], [Stmt], AST, Subst)
-matchBody varDecls stmts decls fname =
-	case varDecls of
-		[VarDecl Nothing vname e meta:varDecls] =
+matchBody :: [VarDecl] [Stmt] AST Id Type -> MMonad Subst
+matchBody vs ss decls fname ftype =
+	case vs of
+		[VarDecl Nothing vname e m1:varDecls] =
 			makeFreshIdentType							>>= \type.
 			match e type								>>= \subst.
 			addVarType vname (type ^^ subst)			>>|
-			return (setVarType env
-						(name +++ "@" +++ name)
-						(type ^^ subst)				)		>>= \envWithVar.
-			matchBody envWithVar varDecls stmts fname
-		[] = case stmts of
-			_ = tbi
-			[]	= 
+			matchBody varDecls ss decls fname ftype
+		[] = case ss of
+			[stmt:stmts] =
+				matchN [stmt:stmts]
+			[]	=
 				setLabel ""						>>|
-				getEnv							>>|
-				addFuncType (TS (freeVars) ())	>>|
-				matchAST decls		>>= \(ast`, subst`)
-				
-				return ([], [], ast`, subst`)
+				getSubst						>>= \subst.
+				getEnv							>>= \env.
+				addFuncType fname 
+							(TS 
+								(difference
+									(freeVars (ftype ^^ subst))
+									(freeVars env)
+								)
+								(ftype ^^ subst)
+							)					>>|
+				matchAST decls
 
-matchStmts :: Env [Stmt] -> MMonad Env
-matchStmts env [stmt:stmts] =
-	matchStmt  env  stmt	>>= \env`.
-	matchStmts env` stmts
-matchStmts env [] = return env
+instance matchN VarDecl where
+	matchN (VarDecl Nothing name e _) =
+		makeFreshIdentType							>>= \type.
+		match e type								>>= \subst.
+		addVarType name (type ^^ subst)				>>|
+		return subst
 
-matchStmt :: Env Stmt -> MMonad Env
-matchStmt env stmt = case stmt of
-	StmtIf e ifStmts mElse	_ =
-		match e (BasicType BoolType)		>>= \subst.
-		matchStmts (env ^^ subst) ifStmts		>>= \env2.
-		case mElse of
-			Nothing			= return env2
-			Just elseStmts	= matchStmts env2 elseStmts 
-	StmtWhile e body		_ =
-		match e (BasicType BoolType)		>>= \subst.
-		matchStmts (env ^^ subst) body
-	StmtAss idWithFields e	_ =
-		tbi
-	StmtFunCall funCall		_ =
-		tbi
-	StmtRet e				_ =
-		tbi
-	StmtRetV				_ =
-		tbi
+returnVar	:== "%return"
+noInfoType	:== IdentType "%noInfo"
+voidType	:== IdentType "%void"
+
+instance matchN FunDecl where
+	matchN (FunDecl fname args Nothing varDecls stmts _) =
+		forM args (\_ -> makeFreshIdentType)			>>= \argTypes.
+		//let tempfType = TS newSet (FuncType argTypes rType) in
+		scope fname (
+			addVarType returnVar noInfoType									>>|
+			forM (zip2 args argTypes) (\(arg,type) -> addVarType arg type)	>>|
+			matchAllN varDecls		>>= \s1.
+			matchAllN stmts			>>= \s2.
+			return (s2 O s1)
+		)					>>= \subst.
+		let argTypes` = map (\t.t ^^ subst) argTypes in
+		getVarType (returnVar +++ "@" +++ fname)	>>= \returnVarType.
+		let returnType =
+				case returnVarType of
+					noInfoType	= Nothing
+					voidType	= Nothing
+					_			= Just returnVarType
+		in
+		let funcType = FuncType argTypes` returnType in
+		getEnv										>>= \env.
+		addFuncType fname 
+			(TS 
+				(difference
+					(freeVars funcType)
+					(freeVars env)
+				)
+				funcType
+			) >>|
+		return subst
+
+/*newRtype :: MMonad () // We have no knowledge about the return type
+newRtype = M \st.(Just (), {st & rType = Nothing})
+
+matchRtype :: (Maybe Type) -> MMonad Subst
+matchRtype mType = M \st.
+	case st.rType of
+		Nothing = (Just idSubst, {st & rType = Just mType})
+		Just mType` =
+			case (mType, mType`) of
+			(Nothing, Nothing)	= (Just idSubst, st)
+			(Just t1, Just t2)	= case unify t1 t2 of
+				Nothing	= (Nothing, st)
+				Just s  = (Just s, )*/
+
+instance matchN [Stmt] where
+	matchN stmts = matchAllN stmts
+
+instance matchN Stmt where
+	matchN stmt = case stmt of
+		StmtIf c body mElse	_ =
+			match c bBoolType			>>= \s1.
+			matchAllN body				>>= \s2.
+			let s3 = s2 O s1 in
+			maybe
+				(return s3)
+				(\else.matchAllN else	>>= \s4.
+				return (s4 O s3))
+				mElse
+		StmtWhile c body	_ =
+			match c bBoolType			>>= \s1.
+			matchAllN body				>>= \s2.
+			return (s2 O s1)
+		StmtAss iwf e		_ =
+			makeFreshIdentType			>>= \a.
+			match iwf a					>>= \s1.
+			match e (a ^^ s1)			>>= \s2.
+			return (s2 O s1)
+		StmtFunCall funCall	_ =
+			makeFreshIdentType			>>= \a.
+			match funCall a
+		StmtRet e			_ =
+			makeFreshIdentType			>>= \a. //TODO: match type with return type in stead of fresh type
+			match e a
+		StmtRetV			_ = return idSubst//TODO: match type with return type in stead of doing nothing
 
 instance match Expr where
-	match _ _ = tbi
+	match expression t = case expression of
+		ExpIdent iwf		_ = match iwf t
+		ExpBinOp e1 op e2	_ = case op of
+				OpPlus		= match2 e1 e2 bIntType bIntType bIntType t
+				OpMinus		= match2 e1 e2 bIntType bIntType bIntType t
+				OpMult		= match2 e1 e2 bIntType bIntType bIntType t
+				OpDiv		= match2 e1 e2 bIntType bIntType bIntType t
+				OpMod		= match2 e1 e2 bIntType bIntType bIntType t
+				OpEquals	= 
+					makeFreshIdentType	>>= \a.
+					match2 e1 e2 a a bBoolType t
+				OpLT		= match2 e1 e2 bIntType bIntType bBoolType t
+				OpGT		= match2 e1 e2 bIntType bIntType bBoolType t
+				OpLTE		= match2 e1 e2 bIntType bIntType bBoolType t
+				OpGTE		= match2 e1 e2 bIntType bIntType bBoolType t
+				OpNE		= 
+					makeFreshIdentType	>>= \a.
+					match2 e1 e2 a a bBoolType t
+				OpAnd		= match2 e1 e2 bBoolType bBoolType bBoolType t
+				OpOr		= match2 e1 e2 bBoolType bBoolType bBoolType t
+				OpConcat	=
+					makeFreshIdentType	>>= \a.
+					match2 e1 e2 a (ArrayType a) (ArrayType a) t
+		ExpUnOp op e		_ = case op of
+				OpNot		= match1 e bBoolType bBoolType t
+				OpNeg		= match1 e bIntType  bIntType t
+		ExpInt i			_ = mUnify t bIntType
+		ExpChar c			_ = mUnify t bCharType
+		ExpBool b			_ = mUnify t bBoolType
+		ExpFunCall funCall	_ = match funCall t
+		ExpEmptyArray		_ =
+			makeFreshIdentType					>>= \a.
+			mUnify t (ArrayType a)
+		ExpTuple e1 e2		_ =
+			makeFreshIdentType					>>= \a.
+			makeFreshIdentType					>>= \b.
+			match2 e1 e2 a b (TupleType a b) t
+	where
+		match1 :: Expr Type Type Type -> MMonad Subst
+		match1 e1 t1 resultType t =
+			match e1 t1					>>= \s1.
+			mUnify (t ^^ s1) resultType	>>= \s2.
+			return (s2 O s1)
+		
+		match2 :: Expr Expr Type Type Type Type -> MMonad Subst
+		match2 e1 e2 t1 t2 resultType t =
+			match e1 t1					>>= \s1.
+			match e2 (t2 ^^ s1)			>>= \s2.
+			let s3 = s2 O s1 in
+			mUnify (t ^^ s3) (resultType ^^s3)	>>= \s4.
+			return (s4 O s3)
+
+instance match FunCall where
+	match (FunCall name args _) t =
+		getFuncType name									>>= \(TS boundedTypes fType).
+		makeInstanceFuncType (toList boundedTypes) fType	>>= \(FuncType argTypes rType).
+		matchAll (zip2 args argTypes)						>>= \subst.
+		case rType of
+			Nothing	= return subst
+			Just r	= mUnify (t ^^ subst) (r ^^ subst)
+	match funCall=:(FunCall _ _ m) t = error m.MetaData.pos ("At " <+++ (prettyPrint funCall) <+++ ": expected type " <+++ t
+																	 <+++ " instead of function call")
+
+makeInstanceFuncType :: [TypeVar] Type -> MMonad Type
+makeInstanceFuncType [bounded:rest] fType =
+	makeFreshIdentType		>>= \fresh.
+	makeInstanceFuncType rest (fType ^^ substitute bounded fresh)
+makeInstanceFuncType _ fType = return fType
+
 
 instance match IdWithFields where
-	match idwf t = tbi/*case idWithFields of
-		WithField idwf2 field	= case field of
-			..
-		JustId id				=
-			getVarType env id		>>= \t2.
-			mUnify t t2				>>= \subst.*/
-/*
-instance matchT Expr where
-	matchT env expr t = case expr of
-		ExpIdent idWithFields	meta = toBeImplemented
-		ExpBinOp e1 binOp e2	meta = toBeImplemented
-		ExpUnOp unOp e			meta = toBeImplemented
-		ExpInt i				meta =
-			mUnify t (BasicType IntType)	>>= \subst.
-			return (subst, ExpInt  i (setMetaType meta (BasicType IntType )))
-		ExpChar c				meta = 
-			mUnify t (BasicType CharType)	>>= \subst.
-			return (subst, ExpChar c (setMetaType meta (BasicType CharType)))
-		ExpBool b				meta = toBeImplemented
-		ExpFunCall funCall		meta = toBeImplemented
-		ExpEmptyArray			meta = toBeImplemented
-		ExpTuple e1 e2			meta = toBeImplemented
+	match iwf t =
+		makeFreshIdentType	>>= \a.
+		makeFreshIdentType	>>= \b.
+		case iwf of
+			WithField iwf2 field _	= case field of
+				FieldHd =
+					match iwf2 (ArrayType a)						>>= \subst.
+					mUnify (t ^^ subst) (a ^^ subst)				>>= \s2.
+					return (s2 O subst)
+				FieldTl = 
+					match iwf2 (ArrayType a)						>>= \subst.
+					mUnify (t ^^ subst) (ArrayType (a ^^ subst))	>>= \s2.
+					return (s2 O subst)
+				FieldFst = 
+					match iwf2 (TupleType a b)						>>= \subst.
+					mUnify (t ^^ subst) (a ^^ subst)				>>= \s2.
+					return (s2 O subst)
+				FieldSnd = 
+					match iwf2 (TupleType a b)						>>= \subst.
+					mUnify (t ^^ subst) (b ^^ subst)				>>= \s2.
+					return (s2 O subst)
+			JustId id _				=
+				getVarType id		>>= \t2.
+				mUnify t t2
 
-//instance matchT FunCall where
+// --
+// -- Testing
+// --
 
-//instance matchT IdWithFields where
+import qualified Scanner
 
-
-
-instance match FunDecl where
-	match :: Env FunDecl -> MMonad (Env, FunDecl)
-	match env f=:(FunDecl name args (Just fType=:(FuncType argTypes _)) varDecls stmts meta) =
-		let env2 = setFuncType env name (TS newSet fType)		in		// Set the specified type in the environment
-		let env3 = setArgTypes env2 args argTypes				in		// Set the specified types of the arguments in the environment
-		matchT env3 f fType							>>= \(subst,f`).	// Do the type inference for the body, setting the types in the metadata of the AST
-		let derivedFuncType = fType ^^ subst					in			
-		let derivedArgTypes = map (\at.at ^^ subst) argTypes	in
-		if	(derivedFuncType moreSpecificThan fType)			// The derived function type may not be more specific than the specified type
-				(error meta.MetaData.pos ("Specified type is to general: derived type is " <+++ derivedFuncType))
-				(
-					let free_vars = difference (freeVars fType) (freeVars (env ^^ subst)) in
-					let fTypeScheme = TS (free_vars) fType	in			// Take the original environment with no types for the function or arguments of the
-					let env4 = setFuncType (env ^^ subst) name fTypeScheme	in		// function set and bind all free type variables of the function type in that environment
-					return (env4, f`)									// Return the environment, omitting the types of the arguments of the function
-				)
-				
-		where
-			setArgTypes :: Env [Id] [Type] -> Env
-			setArgTypes env [arg:args] [type:types] = setArgTypes (setVarType env arg type) args types
-			setArgTypes env _ 			_			= env
-			
-	match env f=:(FunDecl name args Nothing varDecls stmts meta) =
-		withFreshIdentType								\fresh.			// Make a fresh type variable for the function
-		let env2 = setFuncType env name (TS newSet fresh)	in			// Set the type of this function to the new type variable in the environment
-		withFreshArgTypes env args					>>= \env3.			// Do the same for all arguments
-		matchT env3 f fresh							>>= \(subst, f`).	// Do the type inference for the body, setting the types in the metadata of the AST
-		let funcType = fresh ^^ subst						in
-		let fTypeScheme = TS (freeVars funcType) funcType	in
-		let env4 = setFuncType (env ^^ subst) name fTypeScheme	in
-		return (env4, f`)												// Return the environment, omitting the types of the arguments of the function
-		where
-			withFreshArgTypes :: Env [Id] -> MMonad Env
-			withFreshArgTypes env [arg:args]	= withFreshIdentType \type.withFreshArgTypes (setVarType env arg type) args
-			withFreshArgTypes env []			= return env
-
-instance matchT FunDecl where
-	matchT :: Env FunDecl Type -> MMonad (Subst, FunDecl)
-	matchT env f=:(FunDecl name args mType [varDecl:varDecls] stmts meta) t =
-		match env varDecl												>>= \(env2, varDecl).
-		matchT env2 (FunDecl name args mType varDecls stmts meta) t		>>= \(subst, (FunDecl name2 args2 mType2 varDecls2 stmts2 meta2)).
-		let env3 = env2 ^^ subst in
-		return (subst, FunDecl name2 args2 mType2 varDecls2 stmts2 meta2)
-	matchT env f=:(FunDecl name args mType [] [stmt:stmts] meta) t =
-		toBeImplemented
-
-instance match VarDecl where
-	match _ _ = toBeImplemented
-
-/*instance match VarDecl where
-	match :: Env VarDecl -> MMonad (Env, VarDecl)
-	match env v=:(VarDecl mType name expr meta) =
-		(case mType of
-			(Just t)	= \f.f t
-			Nothing		= withFreshIdentType)	\type.	// Make a fresh type if no type is specified
-		matchT env v type			>>= \(subst, t2).
-		let env2 = env ^^ subst in
-		let derivedType = type ^^ subst in
-		case mType of
-			(Just t)	= if (t2 === t)
-								(return (env2, ))
-		return (env, v)*/
-//match` :: 
-
-/*class getSpecifiedType a :: a -> Maybe Type
-instance getSpecifiedType VarDecl
-instance getSpecifiedType FunDecl
-
-matchM :: Env a -> MMonad (Subst, a) | matchT, getSpecifiedType a
-matchM env a =
-	case getSpecifiedType a of
-		Just type	=
-			..
-		Nothing		= withFreshIdentType \id.
-						setEnvThenMatch id.
+checkProg :: String [(Id, Type)] [(Id, TypeScheme)] -> [Testcase]
+checkProg prog vartypes funtypes =
+	case 'Scanner'.scanner prog of
+		(_,[e:es])	= thisFailed ("Scan error: \n" +++ (concat ((map toString [e:es]) separatedBy "\n")))
+		(tokens,[])	= case parser tokens of
+			Left es		= thisFailed ("Parse error: \n" +++ (concat ((map toString es) separatedBy "\n")))
+			Right ast	= case typeInference ast of
+				(Just env, _)	= checkEnv env vartypes funtypes
+				_				= thisFailed "Type inference failed"
 where
-	setEnvThenMatch id =
-		set*/
+	thisFailed msg = [Testcase prog (Failed msg)]
 	
-instance matchT VarDecl where
-	matchT :: Env VarDecl Type -> MMonad (Subst, VarDecl)
-	matchT env v=:(VarDecl mType name expr meta) type =
-		let env2 = setVarType env name type  in
-		matchT env2 undef/*expr*/ type
-*/
+	checkEnv :: Env [(Id, Type)] [(Id, TypeScheme)] -> [Testcase]
+	checkEnv env [(var,type):rest] funtypes = 
+		case 'm'.get var env.varTypes of
+			Nothing		= [Testcase prog (Failed (var +++ " not in env")): checkEnv env rest funtypes]
+			Just t		= [Testcase ("Testing type of " +++ var +++ " in:\n" +++ prog) (t shouldBe type): checkEnv env rest funtypes]
+	checkEnv env [] [(func,ts):rest] = 
+		case 'm'.get func env.funcTypes of
+			Nothing		= [Testcase prog (Failed (func +++ " not in env")): checkEnv env [] rest]
+			Just ts`	= [Testcase ("Testing type of " +++ func +++ " in:\n" +++ prog) $
+				assert $ isomorphic ts ts`: checkEnv env [] rest]
+	checkEnv _ [] [] = []
+
+checkVars :: String [(Id, Type)] -> [Testcase]
+checkVars prog vartypes = checkProg prog vartypes []
+
+(shouldFailWith) :: Testcase String -> Testcase
+(shouldFailWith) (Testcase descr result) expReason = case result of
+	Passed			= Testcase descr (Failed "")
+	Failed reason	= Testcase descr (reason shouldBe expReason)
+
+instance == Type where (==) a b = a === b
+
+match_tests =  (checkVars p1 	[ ("@x", bIntType)])
+			++ (checkVars p2	[ ("@x", bIntType)
+								, ("@y", bCharType)
+								])
+			++ (checkVars p3	[ ("@x1", bIntType)
+								, ("@x2", bBoolType)
+								, ("@x3", bBoolType)
+								, ("@x4", TupleType bIntType bIntType)
+								])
+			++ (checkVars p4	[ ("@x1", ArrayType (TupleType bIntType bBoolType))
+								, ("@x2", ArrayType (TupleType bIntType bBoolType))
+								, ("@x3", TupleType bIntType bBoolType)
+								, ("@x4", bBoolType)
+								])
+			/*++ (checkProg p5	[ ("f2@x1", bIntType)
+								, ("f4@l", ArrayType bIntType)
+								]
+								[ /*("@f1", TS (fromList []) $ FuncType [] (Just bIntType))
+								, ("@f2", TS (fromList []) $ FuncType [] Nothing)
+								, ("@f3", TS (fromList []) $ FuncType [ArrayType bIntType] Nothing)
+								, ("@f4", TS (fromList []) $ FuncType [] Nothing)*/
+								])*/
+			++ [(hd (checkVars p6 [])) shouldFailWith "Type inference failed"]
+where
+	//Var declarations
+	p1 = "var x = 1;"
+	p2 = "var x = 1;"
+	  +/ "var y = 'c';"
+	//Expressions
+	p3 = "var x1 = 1 + 1;"
+	  +/ "var x2 = 1 > 2;"
+	  +/ "var x3 = True && False;"
+	  +/ "var x4 = (1,2);"
+	//Field selectors
+	p4 = "var x1 = (1,True) : [];"
+	  +/ "var x2 = x1.tl;"
+	  +/ "var x3 = x1.hd;"
+	  +/ "var x4 = x3.snd;"
+	//Func declarations, funCalls(in expression and direct), local variables, arguments
+	p5 = "f1(){return 1;}" //TODO: Function abstraction and application
+	  +/ "f2(){"
+	  +/ "	var x1 = f1();"
+	  +/ "	f1();"
+	  +/ "	return;"
+	  +/ "}"
+	  +/ "f3(intList){"
+	  +/ "	intList.hd = 1;"
+	  +/ "	return;"
+	  +/ "}"
+	  +/ "f4(){"
+	  +/ "	var l = [];"
+	  +/ "	f3(l);"
+	  +/ "	return;"
+	  +/ "}"
+	p6 = "var x = 1;"
+	  +/ "f(){"
+	  +/ "	x = 'c';"
+	  +/ "return;"
+	  +/ "}"
+	//Statements
+	
+(+/) infixr 5 :: String a -> String | toString a
+(+/) s1 s2 = s1 +++ "\n" +++ (toString s2)
+
+Start w = runTests (unify_tests ++ instanceOf_tests ++ match_tests) (const True) w
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

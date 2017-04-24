@@ -375,30 +375,27 @@ scope :: String (MMonad a) -> MMonad a
 scope s ma =
 	setLabel s >>| ma >>= \a.setLabel "" >>| return a
 
+suffixedName label name = case label of
+	""	= name
+	_	= name +++ "@" +++ label
+
 addVarType :: Id Type -> MMonad Type
 addVarType id t =
 	getLabel	>>= \label.
-	changeEnv (\env. {env & varTypes = 'm'.put (label <+++ "@" <+++ id) t env.varTypes})
+	changeEnv (\env. {env & varTypes = 'm'.put (suffixedName label id) t env.varTypes})
 				>>| return t
 
 addFuncType :: Id TypeScheme -> MMonad TypeScheme
 addFuncType id ts =
 	getLabel	>>= \label.
-	changeEnv (\env. {env & funcTypes = 'm'.put (label <+++ "@" <+++ id) ts env.funcTypes})
+	changeEnv (\env. {env & funcTypes = 'm'.put (suffixedName label id) ts env.funcTypes})
 				>>| return ts
-
-putId :: String Id t (Map Id t) -> Map Id t
-putId l name t typeMap = 'm'.put suffixedName t typeMap
-where
-	suffixedName = case l of
-		""	= name
-		_	= name +++ "@" +++ l
 
 getVarType :: Id -> MMonad Type
 getVarType id =
 	getEnv		>>= \env.
 	getLabel	>>= \label.
-	case 'm'.get (label <+++ "@" <+++ id ) env.varTypes of
+	case 'm'.get (suffixedName label id) env.varTypes of
 		Just t	= return t
 		_		= fail
 
@@ -406,7 +403,7 @@ getFuncType :: Id -> MMonad TypeScheme
 getFuncType id =
 	getEnv		>>= \env.
 	getLabel	>>= \label.
-	case 'm'.get (label <+++ "@" <+++ id ) env.funcTypes of
+	case 'm'.get (suffixedName label id) env.funcTypes of
 		Just t	= return t
 		_		= fail
 
@@ -750,19 +747,19 @@ checkVars prog vartypes = checkProg prog vartypes []
 
 instance == Type where (==) a b = a === b
 
-match_tests =  (checkVars p1 	[ ("@x", bIntType)])
-			++ (checkVars p2	[ ("@x", bIntType)
-								, ("@y", bCharType)
+match_tests =  (checkVars p1 	[ ("x", bIntType)])
+			++ (checkVars p2	[ ("x", bIntType)
+								, ("y", bCharType)
 								])
-			++ (checkVars p3	[ ("@x1", bIntType)
-								, ("@x2", bBoolType)
-								, ("@x3", bBoolType)
-								, ("@x4", TupleType bIntType bIntType)
+			++ (checkVars p3	[ ("x1", bIntType)
+								, ("x2", bBoolType)
+								, ("x3", bBoolType)
+								, ("x4", TupleType bIntType bIntType)
 								])
-			++ (checkVars p4	[ ("@x1", ArrayType (TupleType bIntType bBoolType))
-								, ("@x2", ArrayType (TupleType bIntType bBoolType))
-								, ("@x3", TupleType bIntType bBoolType)
-								, ("@x4", bBoolType)
+			++ (checkVars p4	[ ("x1", ArrayType (TupleType bIntType bBoolType))
+								, ("x2", ArrayType (TupleType bIntType bBoolType))
+								, ("x3", TupleType bIntType bBoolType)
+								, ("x4", bBoolType)
 								])
 			/*++ (checkProg p5	[ ("f2@x1", bIntType)
 								, ("f4@l", ArrayType bIntType)

@@ -11,7 +11,7 @@ instance toString OrderItem
 instance toString (OrderItem, OrderItem)
 instance toString OrderGraph
 
-class doOrder a :: a -> OrderGraph
+class doOrder a :: OrderGraph a -> OrderGraph
 class buildGraphFrom a :: OrderItem [String] a -> OrderGraph
 
 :: OrderItem

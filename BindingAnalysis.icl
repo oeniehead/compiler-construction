@@ -7,6 +7,8 @@ import GenString
 import Error
 import StdList
 
+import StdDebug
+
 import Data.Either
 
 derive gString OrderItem, Error, Signature
@@ -36,18 +38,27 @@ buildInFunctions = [
 	
 :: ReturnResult :== (Either ReturnBehaviour Error)
 
-doAnalysis :: AST -> OrderGraph
-doAnalysis declarations = 
-	let [item :items] = map buildGraph declarations
-		graph = foldl (combineGraphs) item items
-	in	graph
+doAnalysis :: OrderGraph AST -> OrderGraph
+doAnalysis _ [] = ([], [], [])
+doAnalysis graph [declaration : declarations] = 
+	let item =  buildGraph graph declaration
+		items = combineGraphs item graph
+	in	combineGraphs items (doAnalysis items declarations)
 	
-buildGraph :: Decl -> OrderGraph
-buildGraph (Var v _) = doOrder v
-buildGraph (Fun f _) = doOrder f
+buildGraph :: OrderGraph Decl -> OrderGraph
+buildGraph g (Var v _) = doOrder g v
+buildGraph g (Fun f _) = doOrder g f
 
 combineGraphs :: OrderGraph OrderGraph -> OrderGraph
 combineGraphs (a, b, c) (i, j, k) = (a ++ i, b ++ j, c ++ k)
+
+test :: AST
+test = [
+		(Fun (FunDecl "c" [] Nothing [] [(StmtRet (ExpInt 1 {pos={line=2 ,col=8} ,type=Nothing}) {pos={line=2 ,col=1} ,type=Nothing})] {pos={line=0 ,col=0} ,type=Nothing}) {pos={line=0 ,col=0} ,type=Nothing}),
+		(Fun (FunDecl "c" [] Nothing [] [(StmtRet (ExpInt 1 {pos={line=7 ,col=8} ,type=Nothing}) {pos={line=7 ,col=1} ,type=Nothing})] {pos={line=5 ,col=0} ,type=Nothing}) {pos={line=5 ,col=0} ,type=Nothing})
+	]
+	
+Start = doAnalysis ([], [], []) test
 	
 /*
 Build graph from VarDecl:
@@ -55,10 +66,20 @@ Build graph from VarDecl:
 	- If the variable is used inside its own initialisation a cycle will be detected
 */
 instance doOrder VarDecl where
-	doOrder (VarDecl _ name expression {MetaData| pos = pos, type = _}) = 
+	doOrder graph (VarDecl _ name expression {MetaData| pos = pos, type = _}) = 
 		let	me 		= (VarItem name pos)
-			items 	= combineGraphs (buildGraphFrom me [] expression) ([], [(VarSig name)], [])
-		in 	items
+			item 	= if dup 
+						([], [], [{
+									pos = pos,
+									severity = FATAL,
+									stage = Binding,
+									message = "Variable " +++ name +++ " is defined more than once"
+								}])
+						([], [signature], [])
+		in 	combineGraphs (buildGraphFrom me [] expression) item
+		where
+			signature = VarSig name
+			dup = isDuplicate graph signature
 
 /*
 Build graph from FunDecl:
@@ -69,23 +90,36 @@ Build graph from FunDecl:
 	- A cycle in functions means recursion, for now we do not allow that
 */
 instance doOrder FunDecl where
-	doOrder (FunDecl name arguments type variables statements {MetaData| pos = pos, type = _}) = 
+	doOrder graph (FunDecl name arguments type variables statements {MetaData| pos = pos, type = _}) = 
 		let 
+			me = FuncItem name pos
 			returns = returnsValue pos statements
-			me = (FuncItem name)
-		in	case returns of
-				(Right error) 	= ([], [], [error])
-				(Left retv)		= combineGraphs (buildGraphFrom (FuncItem name pos) local statements)
-												([], [(FuncSig name (length arguments) retv)], [])
+			function_dup = passThroughError (isDuplicate graph (FuncSig name 0 False)) {
+															pos = pos,
+															severity = FATAL,
+															stage = Binding,
+															message = "Function " +++ name +++ " is defined more than once"
+														} 
+			arguments_dup = findDuplicates arguments pos
+			local_dup = findDuplicates localVariables pos
+			local_errors = function_dup ++ arguments_dup ++ local_dup
+			item = case returns of
+				(Right error) 	= ([], [], [error] ++ local_errors)
+				(Left retv)		= ([], [(FuncSig name (length arguments) retv)], local_errors)
+		in	combineGraphs (buildGraphFrom me localEnv statements) item
 		where
-			local = arguments ++ (getLocalVariableNames variables)
+			localVariables = getLocalVariableNames variables
+			localEnv = arguments ++ localVariables
 			getLocalVariableNames :: [VarDecl] -> [String]
 			getLocalVariableNames declarations = map (\(VarDecl _ name _ _). name) declarations
 			getVariableGraph :: [VarDecl] OrderItem [String] -> OrderGraph
 			getVariableGraph [] _ _ = ([], [])
-			getVariableGraph [(VarDecl _ name expression _) : b] me local = 
-				combineGraphs 	(buildGraphFrom me local expression)
-								(getVariableGraph b me [name : local])
+			getVariableGraph [(VarDecl _ name expression _) : b] me localEnv = 
+				combineGraphs 	(buildGraphFrom me localEnv expression)
+								(getVariableGraph b me [name : localEnv])
+			passThroughError :: Bool Error -> [Error]
+			passThroughError True error = [error]
+			passThroughError False _ = []
 			returnsValue :: Position [Stmt] -> (Either Bool Error) 
 			returnsValue pos stmts =
 				case sum of
@@ -101,6 +135,29 @@ instance doOrder FunDecl where
 														})
 					(Right error) = (Right error)
 				where sum = summariseStatements stmts pos
+				
+findDuplicates :: [String] Position -> [Error]
+findDuplicates [] _ = []
+findDuplicates [a : b] pos = 
+	if (isMember a b)
+		(error ++ next)
+		next
+	where
+		next = findDuplicates b pos
+		error = [{
+					pos = pos,
+					severity = FATAL,
+					stage = Binding,
+					message = "Variable " +++ a +++ " is defined multiple times"
+			}]	
+				
+isDuplicate :: OrderGraph Signature -> Bool
+isDuplicate (_, signatures, _) sig = length (filter (matchSignatures sig) signatures) > 0
+
+matchSignatures :: Signature Signature -> Bool
+matchSignatures (VarSig a) (VarSig b) = a == b
+matchSignatures (FuncSig a _ _) (FuncSig b _ _) = a == b
+matchSignatures _ _ = False
 
 /*
 :: Stmt
@@ -363,7 +420,7 @@ getASTPosition [_ : b] item = 1 + (getASTPosition b item)
 
 doBindingAnalysis :: AST -> Either AST [Error]
 doBindingAnalysis ast =
-	case (doAnalysis ast) of
+	case (doAnalysis ([], [], []) ast) of
 		graph=:(relations, signatures, []) = case doUnusedAnalysis graph of
 			[] = case doCycleAnalysis graph of
 				[] 	= (Left (doOrderDeclarations graph ast))

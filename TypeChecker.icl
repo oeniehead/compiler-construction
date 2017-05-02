@@ -82,28 +82,11 @@ newEnv = { varTypes  = 'm'.newMap
 		 , funcTypes = 'm'.newMap
 		 }
 
-typeOfVar :: Env Id -> Type
-typeOfVar {varTypes} id = fromJust ('m'.get id varTypes)
-
-//typeOfVar :: Env Id -> Maybe Type
-//typeOfVar {varTypes} id = 'm'.get id varTypes
-
-typeOfFunc :: Env Id -> TypeScheme
-typeOfFunc {funcTypes} id = fromJust ('m'.get id funcTypes)
-
-//typeOfFunc :: Env Id -> Maybe TypeScheme
-//typeOfFunc {funcTypes} id = 'm'.get id funcTypes
-
 setVarType :: Env Id Type -> Env
 setVarType env id type = {env & varTypes = 'm'.put id type env.varTypes}
 
 setFuncType :: Env Id TypeScheme -> Env
 setFuncType env id ts = {env & funcTypes = 'm'.put id ts env.funcTypes}
-
-//deleteVar :: Env Id -> Env
-//deleteVar env id = {env & varTypes = set_ env.varTypes id (abort "Variable type not in environment")}
-
-set_ f id type :== \id2. if (id === id2) type (f id)
 
 instance ^^ Env where
 	(^^) {varTypes,funcTypes} subst =
@@ -140,6 +123,10 @@ instance isConcrete Type where
 
 instance isConcrete TypeScheme where
 	isConcrete ts = null (freeVars ts)
+
+// --
+// -- Renamings
+// --
 
 :: Renaming :== 'm'.Map TypeVar TypeVar
 
@@ -271,9 +258,8 @@ instance toString Type where toString t = gString{|*|} t
 
 prop_unify :: Type Type -> Bool
 prop_unify type1 type2 = case unify type1 type2 of
-	Nothing		= /*trace_n ("could not unify " +++ (toString type1) +++ " and " +++ (toString type2))*/ False
-	Just subst	= //trace_n ((trace_ type1 subst) +++ ", " +++ (trace_ type2 subst))
-			(type1 ^^ subst === type2 ^^ subst)
+	Nothing		= False
+	Just subst	= (type1 ^^ subst === type2 ^^ subst)
 
 //trace_ type subst :== "subst (" +++ (toString type) +++ ") = (" +++ (toString (subst type)) +++ ")"
 (<+++) infixl 9 :: !String !a -> String | toString a
@@ -341,6 +327,7 @@ makeFreshIdentType = fmap (\id.IdentType id) makeFreshVar
 
 error :: Position String -> MMonad a
 error pos msg = M \st.(Nothing, {st & errors = [makeError pos ERROR TypeChecking msg: st.errors]})
+debug pos msg = M \st.(Just (), {st & errors = [makeError pos DEBUG TypeChecking msg: st.errors]})
 
 getEnv :: MMonad Env
 getEnv = M \st.(Just st.env,st)
@@ -369,7 +356,7 @@ mUnify t1 t2 = case unify t1 t2 of
 	Just subst	=
 			changeEnv (\env. env ^^ subst)	>>|
 			addSubst subst
-	Nothing		= fail
+	Nothing		= error zero ("Cannot unify " <+++ t1 <+++ " and " <+++ t2) // TODO: position
 
 scope :: String (MMonad a) -> MMonad a
 scope s ma =
@@ -397,7 +384,9 @@ getVarType id =
 	getLabel	>>= \label.
 	case 'm'.get (suffixedName label id) env.varTypes of
 		Just t	= return t
-		_		= fail
+		_		= case 'm'.get id env.varTypes of
+			Just t	= return t
+			_		= error zero ("Variable '" +++ id +++ "' not defined")//TODO: position
 
 getFuncType :: Id -> MMonad TypeScheme
 getFuncType id =
@@ -405,7 +394,9 @@ getFuncType id =
 	getLabel	>>= \label.
 	case 'm'.get (suffixedName label id) env.funcTypes of
 		Just t	= return t
-		_		= fail
+		_		= case 'm'.get id env.funcTypes of
+			Just t	= return t
+			_		= error zero ("Variable '" +++ id +++ "' not defined")//TODO: position
 
 //AMF instances
 mAp :: (MMonad (a -> b)) (MMonad a) -> MMonad b
@@ -473,59 +464,19 @@ matchAllN list =
 		idSubst list
 
 typeInference :: AST -> ((Maybe Env), [Error])
-typeInference ast = mRun (matchAST ast >>| getEnv)
+typeInference ast = mRun (matchAST ast)
 
-//setType :: MetaData Type -> MetaData //verplaatsen naar SPLParser
-//setType m t = {m & type = Just t}
-
-matchAST :: AST -> MMonad Subst
-matchAST [Fun (FunDecl name args Nothing varDecls stmts m1) m2:decls] =
-	makeFreshIdentType									>>= \fType.
-	setLabel name										>>|	
-			forM args (\arg -> freshInEnv arg)			>>|
-			matchBody varDecls stmts decls name fType
-
-matchAST [Var (VarDecl Nothing name e m1) m2:decls] =
-	makeFreshIdentType					>>= \type.
-	match e type						>>= \subst.
-	addVarType name (type ^^ subst)		>>|
-	matchAST decls
-
-matchAST [] = getSubst//return idSubst
-
-freshInEnv :: Id -> MMonad Type
-freshInEnv arg =
-	makeFreshIdentType	>>= \t.
-	addVarType arg t
-
-matchBody :: [VarDecl] [Stmt] AST Id Type -> MMonad Subst
-matchBody vs ss decls fname ftype =
-	case vs of
-		[VarDecl Nothing vname e m1:varDecls] =
-			makeFreshIdentType							>>= \type.
-			match e type								>>= \subst.
-			addVarType vname (type ^^ subst)			>>|
-			matchBody varDecls ss decls fname ftype
-		[] = case ss of
-			[stmt:stmts] =
-				matchN [stmt:stmts]
-			[]	=
-				setLabel ""						>>|
-				getSubst						>>= \subst.
-				getEnv							>>= \env.
-				addFuncType fname 
-							(TS 
-								(difference
-									(freeVars (ftype ^^ subst))
-									(freeVars env)
-								)
-								(ftype ^^ subst)
-							)					>>|
-				matchAST decls
+matchAST :: AST -> MMonad Env
+matchAST ast =
+	forM_ ast (\decl.case decl of
+		Var varDecl _ = matchN varDecl
+		Fun funDecl _ = matchN funDecl
+		) >>| getEnv
 
 instance matchN VarDecl where
-	matchN (VarDecl Nothing name e _) =
+	matchN v=:(VarDecl Nothing name e _) =
 		makeFreshIdentType							>>= \type.
+		debug zero ("Fresh type " +++ (prettyPrint type) +++ " for " +++ (prettyPrint v)) >>|
 		match e type								>>= \subst.
 		addVarType name (type ^^ subst)				>>|
 		return subst
@@ -547,6 +498,7 @@ instance matchN FunDecl where
 		)					>>= \subst.
 		let argTypes` = map (\t.t ^^ subst) argTypes in
 		getVarType (returnVar +++ "@" +++ fname)	>>= \returnVarType.
+		debug zero ("Final type of " +++ returnVar +++ "@" +++ fname +++ ": " +++ (prettyPrint returnVarType)) >>|
 		let returnType =
 				case returnVarType of
 					noInfoType	= Nothing
@@ -554,6 +506,9 @@ instance matchN FunDecl where
 					_			= Just returnVarType
 		in
 		let funcType = FuncType argTypes` returnType in
+		debug zero ("Final return type of " +++ fname +++ ": " +++ (case returnType of
+						Nothing = "Void"
+						Just type = prettyPrint type)) >>|
 		getEnv										>>= \env.
 		addFuncType fname 
 			(TS 
@@ -564,23 +519,6 @@ instance matchN FunDecl where
 				funcType
 			) >>|
 		return subst
-
-/*newRtype :: MMonad () // We have no knowledge about the return type
-newRtype = M \st.(Just (), {st & rType = Nothing})
-
-matchRtype :: (Maybe Type) -> MMonad Subst
-matchRtype mType = M \st.
-	case st.rType of
-		Nothing = (Just idSubst, {st & rType = Just mType})
-		Just mType` =
-			case (mType, mType`) of
-			(Nothing, Nothing)	= (Just idSubst, st)
-			(Just t1, Just t2)	= case unify t1 t2 of
-				Nothing	= (Nothing, st)
-				Just s  = (Just s, )*/
-
-instance matchN [Stmt] where
-	matchN stmts = matchAllN stmts
 
 instance matchN Stmt where
 	matchN stmt = case stmt of
@@ -604,11 +542,25 @@ instance matchN Stmt where
 			return (s2 O s1)
 		StmtFunCall funCall	_ =
 			makeFreshIdentType			>>= \a.
+			debug zero ("Fresh type " +++ (prettyPrint a) +++ " for " +++ (prettyPrint stmt)) >>|
 			match funCall a
-		StmtRet e			_ =
-			makeFreshIdentType			>>= \a. //TODO: match type with return type in stead of fresh type
+		StmtRet e			m =
+			getVarType returnVar		>>= \rType.
+			(case rType of
+				noInfoType	= makeFreshIdentType >>= \a.
+					debug zero ("making fresh return type for " +++ (prettyPrint (StmtRet e m))) >>|
+					addVarType returnVar a
+				voidType	= error m.MetaData.pos "Non-matching return types"
+				type		= return type)
+										>>= \a.
 			match e a
-		StmtRetV			_ = return idSubst//TODO: match type with return type in stead of doing nothing
+		StmtRetV			m =
+			getVarType returnVar		>>= \rType.
+			case rType of
+				noInfoType	= addVarType returnVar voidType >>| return idSubst
+				voidType	= return idSubst
+				_			= error m.MetaData.pos "Non-matching return types"
+
 
 instance match Expr where
 	match expression t = case expression of
@@ -666,13 +618,22 @@ instance match Expr where
 instance match FunCall where
 	match (FunCall name args _) t =
 		getFuncType name									>>= \(TS boundedTypes fType).
+		debug zero ("Retrieved type of " +++ name +++ ": " +++ (toString (TS boundedTypes fType))) >>|
 		makeInstanceFuncType (toList boundedTypes) fType	>>= \(FuncType argTypes rType).
+		debug zero ("Generated instance function type: " +++ (prettyPrint (FuncType argTypes rType))) >>|
 		matchAll (zip2 args argTypes)						>>= \subst.
+		debug zero ("Unified   instance function type: " +++ (toString (TS boundedTypes fType))) >>|
 		case rType of
 			Nothing	= return subst
-			Just r	= mUnify (t ^^ subst) (r ^^ subst)
-	match funCall=:(FunCall _ _ m) t = error m.MetaData.pos ("At " <+++ (prettyPrint funCall) <+++ ": expected type " <+++ t
-																	 <+++ " instead of function call")
+			Just r	= mUnify (t ^^ subst) (r ^^ subst)	>>= \s1.
+					return (s1 O subst)
+// twee doelen:
+// checken of typing klopt 
+//		f :: A.a:[Int] a [a] -> a
+//		f([1], 1, ['c'])
+// unification van unknown variabelen
+//      var x = []; //lijst van int
+//		f(x,1,[]);
 
 makeInstanceFuncType :: [TypeVar] Type -> MMonad Type
 makeInstanceFuncType [bounded:rest] fType =
@@ -716,26 +677,31 @@ import qualified Scanner
 checkProg :: String [(Id, Type)] [(Id, TypeScheme)] -> [Testcase]
 checkProg prog vartypes funtypes =
 	case 'Scanner'.scanner prog of
-		(_,[e:es])	= thisFailed ("Scan error: \n" +++ (concat ((map toString [e:es]) separatedBy "\n")))
+		(_,[e:es])	= thisFailed ("Scan error: \n" +++ (errorsToString [e:es]))
 		(tokens,[])	= case parser tokens of
-			Left es		= thisFailed ("Parse error: \n" +++ (concat ((map toString es) separatedBy "\n")))
+			Left es		= thisFailed ("Parse error: \n" +++ (errorsToString es))
 			Right ast	= case typeInference ast of
-				(Just env, _)	= checkEnv env vartypes funtypes
-				_				= thisFailed "Type inference failed"
+				(Just env, log)	= checkEnv env vartypes funtypes (reverse log)
+				(Nothing, es)	= thisFailed ("Type inference failed.\n"
+												+++ (errorsToString es))
 where
 	thisFailed msg = [Testcase prog (Failed msg)]
 	
-	checkEnv :: Env [(Id, Type)] [(Id, TypeScheme)] -> [Testcase]
-	checkEnv env [(var,type):rest] funtypes = 
+	checkEnv :: Env [(Id, Type)] [(Id, TypeScheme)] [Error] -> [Testcase]
+	checkEnv env [(var,type):rest] funtypes log = 
 		case 'm'.get var env.varTypes of
-			Nothing		= [Testcase prog (Failed (var +++ " not in env")): checkEnv env rest funtypes]
-			Just t		= [Testcase ("Testing type of " +++ var +++ " in:\n" +++ prog) (t shouldBe type): checkEnv env rest funtypes]
-	checkEnv env [] [(func,ts):rest] = 
+			Nothing		= [Testcase prog (Failed (var +++ " not in env")): checkEnv env rest funtypes log]
+			Just t		= [Testcase ("Testing type of " +++ var +++ " in:\n" +++ prog +++ "\n" +++ (errorsToString log)) $
+								if (t == type)
+									Passed
+									(Failed ("Expected " <+++ type <+++ ", got " <+++ t))
+							: checkEnv env rest funtypes log]
+	checkEnv env [] [(func,ts):rest] log = 
 		case 'm'.get func env.funcTypes of
-			Nothing		= [Testcase prog (Failed (func +++ " not in env")): checkEnv env [] rest]
-			Just ts`	= [Testcase ("Testing type of " +++ func +++ " in:\n" +++ prog) $
-				assert $ isomorphic ts ts`: checkEnv env [] rest]
-	checkEnv _ [] [] = []
+			Nothing		= [Testcase prog (Failed (func +++ " not in env")): checkEnv env [] rest log]
+			Just ts`	= [Testcase ("Testing type of " +++ func +++ " in:\n" +++ prog +++ "\n" +++ (errorsToString log)) $
+				assert $ isomorphic ts ts`: checkEnv env [] rest log]
+	checkEnv _ [] [] _ = []
 
 checkVars :: String [(Id, Type)] -> [Testcase]
 checkVars prog vartypes = checkProg prog vartypes []
@@ -761,15 +727,16 @@ match_tests =  (checkVars p1 	[ ("x", bIntType)])
 								, ("x3", TupleType bIntType bBoolType)
 								, ("x4", bBoolType)
 								])
-			/*++ (checkProg p5	[ ("f2@x1", bIntType)
-								, ("f4@l", ArrayType bIntType)
+			++ (checkProg p5	[ //("x1@f2", bIntType)
+								 ("l@f4", ArrayType bIntType)
 								]
-								[ /*("@f1", TS (fromList []) $ FuncType [] (Just bIntType))
-								, ("@f2", TS (fromList []) $ FuncType [] Nothing)
-								, ("@f3", TS (fromList []) $ FuncType [ArrayType bIntType] Nothing)
-								, ("@f4", TS (fromList []) $ FuncType [] Nothing)*/
-								])*/
-			++ [(hd (checkVars p6 [])) shouldFailWith "Type inference failed"]
+								[ ("f1", TS (fromList []) $ FuncType [] (Just bIntType))
+								, ("f2", TS (fromList []) $ FuncType [] Nothing)
+								, ("f3", TS (fromList []) $ FuncType [ArrayType bIntType] Nothing)
+								, ("f4", TS (fromList []) $ FuncType [] Nothing)
+								])
+//			++ [(hd (checkVars p6 [])) shouldFailWith ("Type inference failed."
+//							+/ "ERROR[0,0] (TypeChecking): Cannot unify (BasicType IntType) and (BasicType CharType)")]
 where
 	//Var declarations
 	p1 = "var x = 1;"
@@ -804,7 +771,7 @@ where
 	p6 = "var x = 1;"
 	  +/ "f(){"
 	  +/ "	x = 'c';"
-	  +/ "return;"
+	  +/ "	return;"
 	  +/ "}"
 	//Statements
 	

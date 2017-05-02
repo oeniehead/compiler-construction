@@ -33,3 +33,6 @@ concat l = foldr (+++) "" l
 
 delimit :: [String] String -> String
 delimit strings del = concat (strings separatedBy del)
+
+printAllnl :: [a] -> String | toString a
+printAllnl list = concat (map (\a.toString a +++ "\n") list)

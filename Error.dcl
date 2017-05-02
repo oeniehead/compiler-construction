@@ -31,3 +31,5 @@ makeError :: Position Severity Stage String -> Error
 derive gString Stage, Severity
 
 instance toString Error, Stage, Severity
+
+errorsToString errors :== printAllnl errors 

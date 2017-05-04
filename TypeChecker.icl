@@ -20,7 +20,7 @@ import StdDebug
 
 import qualified Data.Map as m
 from Data.Map import instance Functor (Map k)
-:: Map a k :== 'm'.Map a k
+:: Map k a :== 'm'.Map k a
 
 :: TypeVar  :== Id
 :: TypeScheme = TS (Set TypeVar) Type // the type with the bounded variables
@@ -29,6 +29,8 @@ from Data.Map import instance Functor (Map k)
 :: Env = { varTypes		:: 'm'.Map TypeVar Type
 		 , funcTypes	:: 'm'.Map TypeVar TypeScheme
 		 }
+
+instance toString Type where toString t = prettyPrint t
 
 instance toString TypeScheme where
 	toString (TS boundedVars t) =
@@ -230,6 +232,10 @@ instanceOf_tests =
 		assert $ specificType instanceOf generalType
 	, Testcase "A.a:a b [(b,int)] -> ([a], (b,int)) instanceOf A.a:a b [c] -> ([a], c)" $
 		assert $ specificTypeScheme instanceOf generalTypeScheme
+	, Testcase "" $ assert $
+			(TS (fromList ["%var0"]) $ FuncType [IdentType "%var0"] (Just $ IdentType "%var0"))
+			instanceOf
+			(TS (fromList ["a"]) $ FuncType [IdentType "a"] (Just $ IdentType "a"))
 	]
 where
 	specificType =
@@ -253,8 +259,6 @@ where
 		
 
 // Testing unification
-
-instance toString Type where toString t = gString{|*|} t
 
 prop_unify :: Type Type -> Bool
 prop_unify type1 type2 = case unify type1 type2 of
@@ -487,6 +491,7 @@ voidType	:== IdentType "%void"
 
 instance matchN FunDecl where
 	matchN (FunDecl fname args Nothing varDecls stmts _) =
+		getEnv											>>= \env.
 		forM args (\_ -> makeFreshIdentType)			>>= \argTypes.
 		//let tempfType = TS newSet (FuncType argTypes rType) in
 		scope fname (
@@ -501,15 +506,17 @@ instance matchN FunDecl where
 		debug zero ("Final type of " +++ returnVar +++ "@" +++ fname +++ ": " +++ (prettyPrint returnVarType)) >>|
 		let returnType =
 				case returnVarType of
-					noInfoType	= Nothing
-					voidType	= Nothing
-					_			= Just returnVarType
+					IdentType "%noInfo"	= Nothing //Don't use returnVar here: clean will think that it is
+					IdentType "%void"	= Nothing //a new type variable and will always pattern-match
+					_					= Just returnVarType
 		in
 		let funcType = FuncType argTypes` returnType in
 		debug zero ("Final return type of " +++ fname +++ ": " +++ (case returnType of
 						Nothing = "Void"
 						Just type = prettyPrint type)) >>|
-		getEnv										>>= \env.
+		
+		debug zero ("Free variables in env:" +++ (( printAllnl o toList o freeVars) env)) >>|
+		debug zero ("Free variables in " +++ (toString funcType) +++ ":" +++ (( printAllnl o toList o freeVars) funcType)) >>|
 		addFuncType fname 
 			(TS 
 				(difference
@@ -681,27 +688,47 @@ checkProg prog vartypes funtypes =
 		(tokens,[])	= case parser tokens of
 			Left es		= thisFailed ("Parse error: \n" +++ (errorsToString es))
 			Right ast	= case typeInference ast of
-				(Just env, log)	= checkEnv env vartypes funtypes (reverse log)
-				(Nothing, es)	= thisFailed ("Type inference failed.\n"
-												+++ (errorsToString es))
+				(Just env, log)	=
+					let results = checkEnv env vartypes funtypes
+					in if (any isFailed results)
+							[Testcase prog $ Failed $ concat
+									[ "Log:\n"
+									, errorsToString (reverse log)
+									, "Variable types:\n"
+									, mapToString env.varTypes
+									, "Function types:\n"
+									, mapToString env.funcTypes]
+								: results]
+							results
+				(Nothing, es)	= thisFailed ("Type inference failed.\n" +++ (errorsToString es))
 where
 	thisFailed msg = [Testcase prog (Failed msg)]
+	isFailed (Testcase _ x) = case x of
+		Failed _	= True
+		_			= False
 	
-	checkEnv :: Env [(Id, Type)] [(Id, TypeScheme)] [Error] -> [Testcase]
-	checkEnv env [(var,type):rest] funtypes log = 
-		case 'm'.get var env.varTypes of
-			Nothing		= [Testcase prog (Failed (var +++ " not in env")): checkEnv env rest funtypes log]
-			Just t		= [Testcase ("Testing type of " +++ var +++ " in:\n" +++ prog +++ "\n" +++ (errorsToString log)) $
-								if (t == type)
-									Passed
-									(Failed ("Expected " <+++ type <+++ ", got " <+++ t))
-							: checkEnv env rest funtypes log]
-	checkEnv env [] [(func,ts):rest] log = 
-		case 'm'.get func env.funcTypes of
-			Nothing		= [Testcase prog (Failed (func +++ " not in env")): checkEnv env [] rest log]
-			Just ts`	= [Testcase ("Testing type of " +++ func +++ " in:\n" +++ prog +++ "\n" +++ (errorsToString log)) $
-				assert $ isomorphic ts ts`: checkEnv env [] rest log]
-	checkEnv _ [] [] _ = []
+	checkEnv env vList fList =
+		(map (\(var,type) -> 
+				Testcase ("Variable " +++ var) $ checkMap env.varTypes (var,type) (\t.t shouldBe type)
+			  )
+			vList)
+		++
+		(map (\(func,ts) ->
+				Testcase ("Function " +++ func) $
+					checkMap env.funcTypes (func,ts) (\ts` -> assert $ isomorphic ts ts`)
+			 )
+			fList)
+	
+checkMap :: (Map k a) (k, a) (a -> TestResult) -> TestResult | < k
+checkMap map (var,type) f = 
+	case 'm'.get var map of
+		Nothing		= Failed "not in map"
+		Just t		= f t
+
+mapToString :: (Map k a) -> String | toString k & toString a
+mapToString m = concat (
+	map (\(k,a) -> (toString k) +++ "\t" +++ (toString a) +++ "\n") ('m'.toList m)
+	)
 
 checkVars :: String [(Id, Type)] -> [Testcase]
 checkVars prog vartypes = checkProg prog vartypes []
@@ -727,15 +754,18 @@ match_tests =  (checkVars p1 	[ ("x", bIntType)])
 								, ("x3", TupleType bIntType bBoolType)
 								, ("x4", bBoolType)
 								])
-			++ (checkProg p5	[ //("x1@f2", bIntType)
-								 ("l@f4", ArrayType bIntType)
+			++ (checkProg p5	[ ("x1@f2", bIntType)
+								, ("l@f4", ArrayType bIntType)
 								]
 								[ ("f1", TS (fromList []) $ FuncType [] (Just bIntType))
 								, ("f2", TS (fromList []) $ FuncType [] Nothing)
 								, ("f3", TS (fromList []) $ FuncType [ArrayType bIntType] Nothing)
 								, ("f4", TS (fromList []) $ FuncType [] Nothing)
 								])
-//			++ [(hd (checkVars p6 [])) shouldFailWith ("Type inference failed."
+			++ (checkProg p6	[]
+								[ ("f1", TS (fromList ["a"]) $ FuncType [IdentType "a"] (Just $ IdentType "a"))
+								])
+//			++ [(hd (checkVars pi [])) shouldFailWith ("Type inference failed."
 //							+/ "ERROR[0,0] (TypeChecking): Cannot unify (BasicType IntType) and (BasicType CharType)")]
 where
 	//Var declarations
@@ -753,7 +783,7 @@ where
 	  +/ "var x3 = x1.hd;"
 	  +/ "var x4 = x3.snd;"
 	//Func declarations, funCalls(in expression and direct), local variables, arguments
-	p5 = "f1(){return 1;}" //TODO: Function abstraction and application
+	p5 = "f1(){return 1;}" //TODO: declared types
 	  +/ "f2(){"
 	  +/ "	var x1 = f1();"
 	  +/ "	f1();"
@@ -768,7 +798,8 @@ where
 	  +/ "	f3(l);"
 	  +/ "	return;"
 	  +/ "}"
-	p6 = "var x = 1;"
+	p6 = "f1(a){return a;}"
+	pi = "var x = 1;"
 	  +/ "f(){"
 	  +/ "	x = 'c';"
 	  +/ "	return;"

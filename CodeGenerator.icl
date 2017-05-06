@@ -27,6 +27,7 @@ from Data.Map import instance Functor (Map k)
 	= Val 	String	// Static value
 	| Label String	// To the position of the label
 	| Next 	String	// To the position after this label
+	| Global Int	// Variable offset by the start of the heap
 
 :: CGInst
 	= Inst String [CGArg] (Maybe String)
@@ -49,8 +50,8 @@ from Data.Map import instance Functor (Map k)
 				The empty list is defined by a 0/0 item.
 			e: Tuple:	2 32-bit words, pointed to by x on the stack.
 				Layout:
-					x - 1:	Pointer to first item.
-					x:		Pointer to second item.
+					x - 1:	Pointer to second item.
+					x:		Pointer to first item.
 					
 	Stack management:
 		- Stack begins with values of global variables.
@@ -125,16 +126,103 @@ inFunction name (CG nested) = CG \st.
 		(res, st2) = nested {st & currentFunction = name}
 	in (res, {st2 & currentFunction = previous})
 	
+getFunction :: (CGMonad String)
+getFunction = CG \st.
+	return st.currentFunction
+	
+getArgumentCount :: (CGMonad Int)
+getArgumentCount = CG \st.
+	return (length st.arguments)
+	
 generateLabel :: CGMonad String
 generateLabel = CG \st.
 	(Just "label%" +++ (toString st.counter), {st & counter = st.counter + 1})
+	
+/**
+	Push code that will load the stack location of the variable on the stack.
+	Look for the variable in order:
+		1. Locals.
+		2. Arguments.
+		3. Globals.
+**/
+resolveAddress :: String -> CGMonad ()
+resolveAddress id = CG \st.
+	let
+		numLocalVars 	= length st.localVariables
+		numFuncVars 	= length st.arguments
+		numGlobalVars 	= length st.globalVariables
+	in	case indexOf st.localVariables id of
+			/**
+				Note: due to clean list mechanics, the indexes are reversed.
+					The first element will have the largest index.
+			**/
+			(Just index) = getStackVariable (numLocalVars - index + 1)
+			(Nothing) = case indexOf st.arguments id of
+				(Just index) = getStackVariable (-index - 2)
+				(Nothing) = case indexOf st.globalVariables id of
+					(Just index) = getGlobalVariable (numGlobalVars - index)
+					(Nothing) =  error {
+						pos = zero,
+						severity = FATAL,
+						stage = CG,
+						message = "Variable " +++ id +++ " could not be found"
+					}
+	where
+		getStackVariable :: Int -> GCMonad ()
+		getStackVariable index = CG \st.
+			registerInstructions [
+				Inst "ldl" [Val (toString index)] Nothing
+			]
+		 
+		getGlobalVariable :: Int -> GCMonad ()
+		getGlobalVariable index = 
+			registerInstructions [
+				Inst "ldc" [Global index] Nothing,
+				Inst "lda" [Val "0"] Nothing
+			]
+
+indexOf :: [a] a -> Maybe Int | Eq a
+indexOf list item = indexOfIter list item 0 
+where 
+	indexOfIter :: [a] a Int -> Maybe Int
+	indexOfIter [] _ _ = Nothing
+	indexOfIter [a:b] item count
+	| a == item = Just count
+	| otherwise = indexOfIter b item (count + 1)
+	
+/**
+	Push code that will load the heap location of the fielded variable on the stack.
+**/
+resolveFieldedAddress :: IdWithFields -> GCMonad ()
+resolveFieldedAddress (JustId id metadata) = resolveAddress id
+resolveFieldedAddress (WithField nest field	metadata) = CG \st.
+	let
+		// Load the heap valued pointed to - 1 on the stack
+		loadNext = registerInstructions [
+			Inst "lda" [Val "-1"] Nothing
+		]
+		
+		// Substract 1 from the pointer
+		movePointer = registerInstructions [
+			Inst "ldc" [Val "1"] Nothing
+			Inst "sub" [] Nothing
+		]
+	
+		resolveField = case field of
+			(FieldHd) 	= return ()
+			(FieldFst) 	= return ()
+			(FieldTl) 	= loadNext
+			(FieldSnd) 	= movePointer
+			 
+	in 		resolveFieldedAddress nest
+		>>|	resolveField
 		
 		
 /**
 	Code generator implementation
 **/
 	
-class generateCode a :: a -> CGMonad a
+class generateCode a :: a -> CGMonad ()
 
 instance generateCode AST
 	where generateCode ast =
@@ -163,7 +251,7 @@ instance generateCode AST
 			
 			// Create an instruction to end the program to prevent starting random functions.
 			programEnd = registerInstructions [
-				Inst "halt" [] "main%end"
+				Inst "halt" [] Nothing
 			]
 			
 		in	variableCode 	>>|
@@ -203,16 +291,16 @@ instance generateCode FunDecl
 	where generateCode (FunDecl name args mType decls stmts metadata =
 		/**
 			Stack layout on function call:
-				x - n+2 : return value
-				x - n+1	: argument n
+				x - 2 - n : return value
+				x - 1 - n : argument 1
 				...
-				x - 2	: argument 1
-				x - 1	: previous MP 
-				x		: return address (MP will point to this address)
-				x + 1	: local variable 1
+				x - 1 - 1 : argument n
+				x - 1	  : previous MP 
+				x		  : return address (MP will point to this address)
+				x + 1	  : local variable 1
 				...
-				x + n-1 : local variable n-1
-				x + n	: local variable n
+				x + n - 1 : local variable n-1
+				x + n	  : local variable n
 		
 			1. Take note of all arguments.
 			2. Generate code for all local variables, in normal order.
@@ -243,19 +331,22 @@ instance generateCode FunDecl
 			
 			// Monad to clean up afterwards
 			cleanUp = registerInstructions [
-				// Push return value to begin of frame
-				Inst "stl" ["-" +++ (toString ((length arguments) + 1)] (Just  name +++ "%end"),
 				// Move MP to SP, so we point to the return address
-				Inst "ldrr" [Val "SP", Val "MP"] Nothing,
+				Inst "ldrr" [Val "SP", Val "MP"] (Just (name +++ "%end")),
 				// Load the address into RR
 				Inst "str" [Val "RR"] Nothing,
 				// Load the previous MP into MP, to restore the previous context
-				Inst "str" [Val "MP"] Nothing
+				Inst "str" [Val "MP"] Nothing,
+				// Jump back to caller
+				Inst "ldrr" [Val "PC", Val "RR"] Nothing,
 			]
 			
 		// Set function arguments so the variables are known	
 		in	setFunctionArguments args (
-				variableCode
+					registerInstructions [
+						Inst "nop" [] (Just name +++ "%entry")
+					]
+				>>| variableCode
 			>>| inFunction name (
 					stmtCode
 				)
@@ -287,19 +378,31 @@ instance generateCode Stmt
 				b. If the condition does not succeed, jump over stmts_a
 		**/
 		let
-			
+			elseCode = case mStmts_b of
+				(Just stmts) 	= generateCode stmts
+				(Nothing)		= return ()
 		in 	generateLabel >>= \ifLabel.
 			generateLabel >>= \elseLabel.
 					generateCode cond
+					// Jump to after the iflabel if the condition is false
 				>>| registerInstructions [
 						Inst "ldc" [Val "1"] Nothing,
 						Inst "eq" [] Nothing,
 						Inst "brf" [Next ifLabel] 
 					]
-			
+				>>| generateCode stmts_a
+					// After the if, jump to the end
+					// Use a nop to indicate the start of the 
+				>>| registerInstructions [
+						Inst "bra" [Next elseLabel] Nothing,
+						Inst "nop" [] (Just ifLabel)
+					]
+				>>| elseCode
+					// Another nop to have somewhere to jump to
+				>>| registerInstructions [
+						Inst "nop" [] (Just elseLabel)
+					]
 		
-		
-		generateCode (StmtWhile cond stmts metadata) =
 		/**
 			1. Generate code for condition
 			2. Generate code for statements and take note of length
@@ -308,31 +411,107 @@ instance generateCode Stmt
 				b. Statements.
 				c. Jump to a.
 		**/
-		generateCode (StmtAss idWithFields expr metadata) = 
+		generateCode (StmtWhile cond stmts metadata) =
+			generateLabel >>= \condLabel.
+			generateLabel >>= \endLabel.
+					registerInstructions [
+						Inst "nop" [] (Just condLabel)
+					]
+				>>|	generateCode cond
+					// Jump to the endlabel if the condition is false
+				>>| registerInstructions [
+						Inst "ldc" [Val "1"] Nothing,
+						Inst "eq" [] Nothing,
+						Inst "brf" [Next endLabel] 
+					]
+				>>| generateCode stmts
+				>>| registerInstructions [
+						// Always jump back to the condition test
+						Inst "bra" [Label condLabel] Nothing,
+						Inst "nop" [] (Just endLabel)
+					]
+			
+					
+		/**
+			1. Generate code for the expression.
+			2. Lookup the location on the stack for the variable.
+			3. Move the result to the location on the stack.
+			
+			For a direct assignment, we just move the new value to the stack.
+		**/
+		generateCode (StmtAss (JustId id metadata_2) expr metadata) = 
+				generateCode expr
+				// This will push the address of the variable on the stack
+			>>| resolveAddress id
+				// Store result of expr on location
+			>>| registerInstructions [
+				Inst "sta" [Val 0] Nothing
+			]
+			
+		/**
+			1. Generate code for the expression.
+			2. Lookup the location on the stack for the variable.
+			3. Find the address on the heap of the value we are going to write to.
+			4. Move the result on the stack to the heap.
+			
+			For a 'fielded' assignment we have to determine the destination first.
+			Because it is not possible to just alter the heap, so instead:
+				- Store HP on stack
+				- Set HP to the location we want to update
+				- Push the new value to the heap
+				- Restore HP
+		**/
+		generateCode (StmtAss withField=:(WithField id field metadata_2) expr metadata) = 
+		let
+			
+		in		registerInstructions [
+					"ldr" [Val "HP"] Nothing
+				]
+			>>| generateCode expr
+				// This will push the address of the variable on the stack
+			>>| resolveFieldedAddress withField
+				// Store result of expr on location
+			>>| registerInstructions [
+				Inst "sta" [Val 0] Nothing
+			]
+		
+		
 		/**
 			1. Generate code to resolve idWithFields, result with address on stack.
 			2. Generate code for expression.
 			3. Store result in resolved location.
-		**/
-		generateCode (StmtFunCall funcall metadata) = 
-		/**
-			1. Passthrough generation for FunCall
 			
-			RR value can be ignored here.
+			Just pass through here.
 		**/
-		generateCode (StmtRet expr metadata) = 
+		generateCode (StmtFunCall funCall metadata) = 
+			generateCode funCall
+			
+			
 		/**
 			1. Generate code for expression.
-			2. Push result to RR.
+			2. Save result in MP - 2 - |arguments|
 			3. Jump to function end.
 				(We need some labeling to find the end of the function)
 		**/
-		generateCode (StmtV expr metadata) = 
+		generateCode (StmtRet expr metadata) = 
+				getArgumentCount
+			>>= \arguments. getFunction
+			>>= \function. generateCode expr
+			>>| registerInstructions [
+					Inst "stl" [Val (toString (-2 - arguments))] Nothing
+					Inst "bra" [Label (function +++ "%end")] Nothing
+				]
+				
+				
 		/**
-			1. Push zero to RR.
-			2. Jump to function end.
+			1. Jump to function end.
 				(Again, need some label)
 		**/
+		generateCode (StmtV metadata) = 
+				getFunction
+			>>= \function. registerInstructions [
+					Inst "bra" [Label (function +++ "%end")] Nothing
+				]
 
 instance generateCode [Expr]
 	where generateCode exprs = 
@@ -340,60 +519,89 @@ instance generateCode [Expr]
 			1. Generate code for all expressions.
 			2. Concatenate both.
 				(Works, as expressions simply leave an item on the stack)
+				
+			This is only used to generate code for function arguments.
 		**/
 		sequence_ (
 			map generateCode exprs
 		)
 		
 instance generateCode Expr
-	where generateCode (ExpIdent IdWithFields metadata) = 
-			/**
-				1. Resolve variable name and location.
-					a. Globals are on the beginning on the stack
-					b. Arguments are before the MP
-					c. Locals are after the MP
-				2. Push resulting location on the stack.
-			*/
+		/**
+			1. Resolve variable name and location.
+				a. Globals are on the beginning on the stack
+				b. Arguments are before the MP
+				c. Locals are after the MP
+			2. Push resulting location on the stack.
+		**/
+	where generateCode (ExpIdent variable metadata) = 
+		
+				resolveFieldedAddress variable
+			>>| registerInstructions [
+					Inst "lda" [Val "0"] Nothing
+				]
+				
+				
+		/**
+			1. Generate code for expr_a.
+			2. Generate code for expr_b.
+			3. Select the correct operator instructions for op.
+				a. The operators know their overloading, so this can be delegated.
+						
+			This should probably do most of the work before the operator,
+			as the operator itself is not really aware of the types.
+		**/
 		generateCode (ExpBinOp expr_a op expr_b metadata) = 
-			/**
-				1. Generate code for expr_a.
-				2. Generate code for expr_b.
-				3. Select the correct operator instructions for op.
-					a. The operators know their overloading, so this can be delegated.
-							
-				This should probably do most of the work before the operator,
-				as the operator itself is not really aware of the types.
-			**/
+		
+		
+		/**
+			1. Generate code for expr.
+			2. Select the correct operator instructions for op.
+				a. The operators know their overloading, so this can be delegated.
+						
+			This should probably do most of the work before the operator,
+			as the operator itself is not really aware of the types.
+		**/
 		generateCode (ExpUnOp expr metadata) = 
-			/**
-				1. Generate code for expr.
-				2. Select the correct operator instructions for op.
-					a. The operators know their overloading, so this can be delegated.
-							
-				This should probably do most of the work before the operator,
-				as the operator itself is not really aware of the types.
-			**/
+		
+		
+		/**
+			1. Push a literal int to the stack.
+		**/
 		generateCode (ExpInt int metadata) = 
-			/**
-				1. Push a literal int to the stack.
-			**/
+			registerInstructions [
+				Inst "ldc" [Val (toString int)] Nothing
+			]
+			
+		/**
+			1. Push a literal char to the stack.
+		**/
 		generateCode (ExpChar char metadata) = 
-			/**
-				1. Push a literal char to the stack.
-			**/
+			registerInstructions [
+				Inst "ldc" [Val (toString (toInt char))] Nothing
+			]
+			
+		
+		/**
+			1. Push a literal bool to the stack.
+		**/
 		generateCode (ExpBool bool metadata) =
-			/**
-				1. Push a literal bool to the stack.
-			**/
+		let
+			value = if bool 1 0
+		in	registerInstructions [
+				Inst "ldc" [Val (toString value)] Nothing
+			]
+		
+		/**
+			1. Passthrough generation for FunCall.
+		**/
 		generateCode (ExpFunCall funCall metadata) = 
-			/**
-				1. Passthrough generation for FunCall
-			**/
+				generateCode funCall
+		/**
+			1. Create an empty list item on the stack.
+			2. Store address in stack frame.
+		**/
 		generateCode (ExpEmptyArray metadata) =
-			/**
-				1. Create an empty list item on the stack.
-				2. Store address in stack frame.
-			**/
 			registerInstructions [
 				// Register two empty values.
 				Inst "ldc" [Val "0"] Nothing,
@@ -401,30 +609,47 @@ instance generateCode Expr
 				// Push both values to the stack.
 				Inst "stmh" [Val "2"] Nothing,
 			]
+			
+			
+		/**
+			1. Generate code for expr_a and store result in heap.
+			2. Generate code for expr_b and store result in heap.
+			3. Store both references in heap, and store address in stack.
+		**/
 		generateCode (ExpTuple expr_a expr_b) =
-			/**
-				1. Generate code for expr_a and store result in heap.
-				2. Generate code for expr_b and store result in heap.
-				3. Store both references in heap, and store address in stack.
-			**/
-			generateCode expr_a >>|
+			// Reverse order! b is on x-1 and a on x!
 			generateCode expr_b >>|
+			generateCode expr_a >>|
 			registerInstructions [
 				// Push both items to the heap.
 				Inst "stmh" [Val "2"] Nothing,
 			]
 		
 instance generateCode FunCall
-	where generateCode (FunCall id exprs metadata) =
 		/**
-			1. Resove address of id
-			2. Generate code for all exprs in reverse order.
-				(This sets up all the arguments)
-			3. Push PC + 4 to the stack
-			4. Push current MM to the stack
-			5. Set MM to top of stack
-			6. Jump to resolved function address
+			1. Resolve address of id.
+			2. Allocate return value.
+			3. Push arguments on stack.
+			4. Push current MP on stack.
+			5. Push PC on stack.
+			6. Jump to function.
 		**/
+	where generateCode (FunCall id exprs metadata) =
+				generateLabel 		
+			>>= \returnLabel. 	registerInstructions [
+					Inst "ldc" [Val "0"] Nothing
+				]
+			>>|	generateCode exprs
+			>>| registerInstructions [
+					Inst "ldr" [Val "MP"],
+					Inst "ldc" [Label returnLabel] Nothing,
+					Inst "bra" [Label (id +++ "%entry")] Nothing,
+					Inst "ldr" [Val "SP"] (Just returnLabel),
+					Inst "ldc" [Val (toString (length exprs))] Nothing,
+					Inst "sub" [] Nothing,
+					Inst "str" [Val "SP"] Nothing 
+				]
+		
 		
 instance generateCode BinOp
 	where generateCode operator =
@@ -446,6 +671,26 @@ instance generateCode BinOp
 			2. Generate code for both sides.
 			3. Generate code for operator.
 		**/
+		let
+			inst = case operator of
+				(OpPlus) 	= "add"
+				(OpMinus)	= "sub"
+				(OpMult) 	= "mul"
+				(OpDiv)  	= "div"
+				(OpMod)		= "mod"
+				(OpLT)		= "lt"
+				(OpGT)		= "gt"
+				(OpLTE)		= "le"
+				(OpGTE)		= "ge"
+				(OpAnd)		= "and"
+				(OpOr)		= "or"
+		in 	registerInstructions [
+				Inst inst [] Nothing
+			]
+			
+		generateCode OpConcat = 
+		generateCode OpEquals =
+		generateCode OpNE =
 		
 instance generateCode UnOp
 	where generateCode operator =
@@ -453,16 +698,11 @@ instance generateCode UnOp
 			1. Check if the argument is of a known type.
 			2. Generate code for the operator.
 		**/
-		
-instance generateCode IdWithFields
-	where generateCode (WithField id field metadata) =
-		/**
-			1. Generate code for child id first.
-			2. Take address on stack and select next address/value.
-			2. Leave result on stack.
-		**/
-		generateCode (JustId id metadata) =
-		/**
-			1. Push content of variable to stack.
-		**/
+		let
+			inst = case operator of
+				(OpNot) = "not"
+				(OpNeg) = "neg"
+		in 	registerInstructions [
+				Inst inst [] Nothing
+			]
 			

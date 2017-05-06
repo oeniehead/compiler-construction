@@ -10,6 +10,7 @@ import Control.Monad
 import StdArray
 import Data.List
 from Data.Either import :: Either
+from Data.Set import :: Set
 
 instance zero MetaData where
 	zero = { pos  = zero
@@ -19,10 +20,17 @@ instance zero MetaData where
 setMetaType :: MetaData Type -> MetaData
 setMetaType meta type = {meta & type = Just type}
 
-derive gEq		MetaData, Decl, VarDecl, FunDecl, Type, BasicType,
-				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field
-derive gString 	MetaData, Decl, VarDecl, FunDecl, Type, BasicType,
-				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field
+setMetaTS :: MetaDataTS TypeScheme -> MetaDataTS
+setMetaTS meta ts = {meta & typeScheme = Just ts}
+
+instance getMeta IdWithFields where
+	getMeta (WithField _ _ m) = m
+	getMeta (JustId _ m) = m
+
+derive gEq		MetaData, MetaDataTS, Decl, VarDecl, FunDecl, Type, TypeScheme, BasicType,
+				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field, Set
+derive gString 	MetaData, MetaDataTS, Decl, VarDecl, FunDecl, Type, TypeScheme, BasicType,
+				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field, Set
 
 withPos :: (Position -> Parser Token a) -> Parser Token a
 withPos f = (pGetPos >>= f) @! (makeError zero FATAL Parsing "Failed to determine current position")
@@ -81,11 +89,11 @@ parseAST =	pMany parseDecl				>>= \decls.
 			return decls
 
 parseDecl :: Parser Token Decl
-parseDecl = withMeta \meta.
+parseDecl = //withMeta \meta.
 	(
-		parseVarDecl >>= \v. pYield (Var v meta)
+		parseVarDecl >>= \v. pYield (Var v /*meta*/)
 	) <<|> (
-		parseFunDecl >>= \f. pYield (Fun f meta)
+		parseFunDecl >>= \f. pYield (Fun f /*meta*/)
 	)
 
 parseVarDecl :: Parser Token VarDecl
@@ -110,7 +118,7 @@ parseFunDecl = withPos												\pos.
 	pMany parseVarDecl											>>= \vardecls.
 	pSome parseStmt												>>= \stmts.
 	pSatisfyBrace Close Curly									>>|
-	return (FunDecl name args mType vardecls stmts {pos=pos, type=mType})
+	return (FunDecl name args mType vardecls stmts {pos=pos, typeScheme=Nothing})
 				
 parseIds :: Parser Token [Id]
 parseIds = (

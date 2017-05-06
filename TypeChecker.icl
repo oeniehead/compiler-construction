@@ -22,22 +22,14 @@ import qualified Data.Map as m
 from Data.Map import instance Functor (Map k)
 :: Map k a :== 'm'.Map k a
 
-:: TypeVar  :== Id
-:: TypeScheme = TS (Set TypeVar) Type // the type with the bounded variables
 :: Subst	:== TypeVar -> Type // Type substitutions assign types to type variables
 
-:: Env = { varTypes		:: 'm'.Map TypeVar Type
-		 , funcTypes	:: 'm'.Map TypeVar TypeScheme
+:: Env = { varTypes		:: Map Id Type
+		 , funcTypes	:: Map Id TypeScheme
 		 }
 
-instance toString Type where toString t = prettyPrint t
-
-instance toString TypeScheme where
-	toString (TS boundedVars t) =
-		"A." +++
-		(
-			concat ((toList boundedVars) separatedBy " ")
-		) +++ ":" +++ (prettyPrint t)
+instance toString Type			where toString t = prettyPrint t
+instance toString TypeScheme	where toString t = prettyPrint t
 
 class (^^) infixl 8 a :: a Subst -> a //Map a substitution over a type
 
@@ -119,18 +111,11 @@ instance freeVars Env where		//Here you need the map type
 		(unions (map freeVars ('m'.elems varTypes)))
 		(unions (map freeVars ('m'.elems funcTypes)))
 
-class isConcrete a :: a -> Bool
-instance isConcrete Type where
-	isConcrete t = null (freeVars t)
-
-instance isConcrete TypeScheme where
-	isConcrete ts = null (freeVars ts)
-
 // --
 // -- Renamings
 // --
 
-:: Renaming :== 'm'.Map TypeVar TypeVar
+:: Renaming :== Map TypeVar TypeVar
 
 // Gives a renaming r of type variables such that r t1 = t2, if possible
 class rename a :: a a -> Maybe Renaming
@@ -191,7 +176,7 @@ unify (ArrayType t1) (ArrayType t2)			= unify t1 t2
 unify (IdentType i) (BasicType b)			= Just $ substitute i (BasicType b)
 unify (IdentType i1) (IdentType i2)			= Just $ substitute i1 (IdentType i2)
 unify (IdentType i) t	= if (member i (freeVars t))
-									(/*trace_n (i <+++ "is a member of" <+++ t)*/ Nothing)
+									(Nothing)
 									(Just (substitute i t))
 // IdentType in the other argument is symmetric:
 unify t (IdentType i)						= unify (IdentType i) t
@@ -213,7 +198,7 @@ where
 				return (subst O prevSubst)
 	uFuncType _ _ _ = Nothing
 //unify _				_						= Nothing
-unify a b = /*trace_n ("cannot unify (" <+++ a <+++ ") and (" <+++ b <+++ ")" )*/ Nothing
+unify a b = Nothing
 
 // Is there a substitution s such that t1 is isomorphic to t2 ^^ s?
 class (instanceOf) infix 4 a :: a a -> Bool
@@ -264,10 +249,6 @@ prop_unify :: Type Type -> Bool
 prop_unify type1 type2 = case unify type1 type2 of
 	Nothing		= False
 	Just subst	= (type1 ^^ subst === type2 ^^ subst)
-
-//trace_ type subst :== "subst (" +++ (toString type) +++ ") = (" +++ (toString (subst type)) +++ ")"
-(<+++) infixl 9 :: !String !a -> String | toString a
-(<+++) str x = str +++ toString x
 
 unify_tests =
 	[ Testcase "Same Types:" $
@@ -360,7 +341,7 @@ mUnify t1 t2 = case unify t1 t2 of
 	Just subst	=
 			changeEnv (\env. env ^^ subst)	>>|
 			addSubst subst
-	Nothing		= error zero ("Cannot unify " <+++ t1 <+++ " and " <+++ t2) // TODO: position
+	Nothing		= error zero ("Cannot unify " <++ t1 <++ " and " <++ t2) // TODO: position
 
 scope :: String (MMonad a) -> MMonad a
 scope s ma =
@@ -445,14 +426,6 @@ class match a :: a Type -> MMonad Subst
 //					MMonad fails or gives an error if the type inference fails
 class matchN a :: a -> MMonad Subst
 
-// Thread the substitution of the first argument trough the arguments of the match
-// and deliver the composite substitution
-(>==) infixl 1 :: (MMonad Subst) (a, Type) -> MMonad Subst | match a
-(>==) m (a, t) =
-	m					>>= \s1.
-	match a (t ^^ s1)	>>= \s2.
-	return (s2 O s1)
-
 matchAll :: [(a,Type)] -> MMonad Subst | match a
 matchAll list =
 	foldM (\subst (a,t) -> 
@@ -473,8 +446,8 @@ typeInference ast = mRun (matchAST ast)
 matchAST :: AST -> MMonad Env
 matchAST ast =
 	forM_ ast (\decl.case decl of
-		Var varDecl _ = matchN varDecl
-		Fun funDecl _ = matchN funDecl
+		Var varDecl = matchN varDecl
+		Fun funDecl = matchN funDecl
 		) >>| getEnv
 
 instance matchN VarDecl where
@@ -484,6 +457,13 @@ instance matchN VarDecl where
 		match e type								>>= \subst.
 		addVarType name (type ^^ subst)				>>|
 		return subst
+	matchN (VarDecl (Just specifiedType) name e m) =
+		matchN (VarDecl Nothing name e m)	>>= \subst.
+		getVarType name						>>= \derivedType.
+		if (specifiedType instanceOf derivedType)
+			(addVarType name specifiedType >>|
+			 return subst						)
+			(error m.MetaData.pos ("Specified type too generic, derived type is: " <++ derivedType) >>| fail)
 
 returnVar	:== "%return"
 noInfoType	:== IdentType "%noInfo"
@@ -507,7 +487,7 @@ instance matchN FunDecl where
 		let returnType =
 				case returnVarType of
 					IdentType "%noInfo"	= Nothing //Don't use returnVar here: clean will think that it is
-					IdentType "%void"	= Nothing //a new type variable and will always pattern-match
+					IdentType "%void"	= Nothing // a new type variable and will always pattern-match
 					_					= Just returnVarType
 		in
 		let funcType = FuncType argTypes` returnType in
@@ -526,6 +506,36 @@ instance matchN FunDecl where
 				funcType
 			) >>|
 		return subst
+	/*
+	Probleem bij recursief typechecken:
+	f(a,b){ // type: A.a: a Bool -> a
+		if(b){
+			int x = f(10,False);//Hier weet je het type van f nog niet goed genoeg!
+			print x;
+			bool y = f(10,False);//Dit zou fout moeten gaan!
+		} else {
+			return a;
+		}
+	}
+	Je kunt het return type bij regel 3 ook niet vaststellen op Int, omdat dat te specifiek is. We zouden dit evt. wel
+	kunnen doen om het onszelf wat makkelijker te maken, omdat het anders wel heel lastig wordt. Ik kan ook geen praktisch
+	voorbeeld bedenken waarbij het type van de recursieve aanroep anders is dan het meest generieke af te leiden type.
+	
+	als er een type is gespecificeerd kun je dit op 2 manieren oplossen:
+	1. Zet het gespecificeerde type in de env en ga verder met typechecken
+		voordeel hiervan is dat je direct het recursieve gebruik kunt checken
+	2. Typecheck eerst met allemaal vers gegenereerde types en kijk dan of het gespecificeerde type niet te generiek is
+		Je hebt hier het ene voordeel niet, maar misschien is het beter om het recursieve typechecken gewoon in alle
+		gevallen hetzelfde te laten werken
+	*/
+	matchN (FunDecl fname args (Just specifiedType) varDecls stmts m) =
+		matchN (FunDecl fname args Nothing varDecls stmts m)	>>= \subst.
+		getFuncType fname										>>= \derivedTS=:(TS _ derivedType).
+		if (specifiedType instanceOf derivedType)
+			(addFuncType fname 
+				(TS (freeVars specifiedType) specifiedType) >>|
+			return subst)
+			(error m.MetaDataTS.pos ("Specified type too generic, derived type is: " <++ derivedTS) >>| fail)
 
 instance matchN Stmt where
 	matchN stmt = case stmt of
@@ -809,16 +819,131 @@ where
 (+/) infixr 5 :: String a -> String | toString a
 (+/) s1 s2 = s1 +++ "\n" +++ (toString s2)
 
-Start w = runTests (unify_tests ++ instanceOf_tests ++ match_tests) (const True) w
 
 
 
+// --
+// -- Setting the types in the AST
+// --
+
+changeMeta :: MetaData Env Id -> MetaData
+changeMeta m env name = setMetaType m (fromJust ('m'.get name env.varTypes))
+
+changeMetaTS :: MetaDataTS Env Id -> MetaDataTS
+changeMetaTS m env name = setMetaTS m (fromJust ('m'.get name env.funcTypes))
+
+class setTypes a :: Env a -> a
+
+instance setTypes AST where
+	setTypes e ast = map (setTypes e) ast
+
+instance setTypes Decl where
+	setTypes e (Var v) = Var (setTypes e v)
+//	setTypes e (Fun f) = Fun (setTypes e f)
+
+instance setTypes VarDecl where
+	setTypes e (VarDecl mType name expr m) = tbi//VarDecl mType name (setTypes e expr) (changeMeta m e name)
 
 
+		
+/*
+instance setTypes FunDecl where
+	setTypes e (FunDecl id args mType varDecls stmts _) =
+		rtrn id + rtrn "( " + concat args (rtrn ", ") + rtrn " )" + type + nl + rtrn "{" + 
+			( indentBlock (
+				(concat varDecls nl) + separator + (concat stmts (nl)) 
+			)) + rtrn "}" 
+	where
+		type = case mType of
+			(Just type) = rtrn " :: " + setTypes type
+			Nothing		= zero
+		separator = if (length varDecls * length stmts > 0) (nl) (zero)
+		
+instance setTypes Stmt where
+	setTypes e (StmtIf cond stmtA mStmtB _) = rtrn "if ( " + setTypes cond + rtrn " ) {" + 
+		(indentBlock (concat stmtA nl)) + rtrn "}" + stmtB
+		where 
+			stmtB = case mStmtB of
+				(Just stmt) = nl + rtrn "else {" + indentBlock (concat stmt nl) + rtrn "}"
+				Nothing		= zero
+	setTypes (StmtWhile cond stmt _) = rtrn "while ( " + setTypes cond + rtrn " ) {" +
+		(indentBlock (concat stmt nl)) + rtrn "}"
+	setTypes (StmtAss id expr _) = setTypes id + rtrn " = " + setTypes expr + rtrn ";"
+	setTypes (StmtFunCall funCall _) = setTypes funCall + rtrn ";"
+	setTypes (StmtRet expr _) = rtrn "return " + setTypes expr + rtrn ";"
+	setTypes (StmtRetV _) = rtrn "return;"
+*/
+
+typed :: Env a -> (a,Type) | setTypes a & getMeta a
+typed e a = let a` = setTypes e a in (a`, fromJust (getMeta a`).type)
+
+/*
+instance setTypes Expr where
+	setTypes e expr = case expr of
+		ExpIdent iwf		m = match iwf t
+		ExpBinOp e1 op e2	m = case op of
+			OpPlus		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Int)
+			OpMinus		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Int)
+			OpMult		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Int)
+			OpDiv		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Int)
+			OpMod		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Int)
+			OpEquals	= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Bool)
+			OpLT		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Bool)
+			OpGT		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Bool)
+			OpLTE		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Bool)
+			OpGTE		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Bool)
+			OpNE		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Bool)
+			OpAnd		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Bool)
+			OpOr		= ExpBinOp (setTypes e e1) op (setTypes e e2) (setMetaType m Bool)
+			OpConcat	=
+				let (e1`,elType) = typed e e1 in 
+				let (e2`,listType) = typed e e2 in
+				ExpBinOp e1` op (setTypes e e2) (setMetaType m 
+						if (listType instanceOf )
+					)
+		ExpUnOp op e		m = case op of
+			OpNot		= match1 e bBoolType bBoolType t
+			OpNeg		= match1 e bIntType  bIntType t
+		ExpInt i			m = mUnify t bIntType
+		ExpChar c			m = mUnify t bCharType
+		ExpBool b			m = mUnify t bBoolType
+		ExpFunCall funCall	m = match funCall t
+		ExpEmptyArray		m =
+			makeFreshIdentType					>>= \a.
+			mUnify t (ArrayType a)
+		ExpTuple e1 e2		m =
+			makeFreshIdentType					>>= \a.
+			makeFreshIdentType					>>= \b.
+			match2 e1 e2 a b (TupleType a b) t
+	where
+		match1 :: Expr Type Type Type -> MMonad Subst
+		match1 e1 t1 resultType t =
+			match e1 t1					>>= \s1.
+			mUnify (t ^^ s1) resultType	>>= \s2.
+			return (s2 O s1)
+		
+		match2 :: Expr Expr Type Type Type Type -> MMonad Subst
+		match2 e1 e2 t1 t2 resultType t =
+			match e1 t1					>>= \s1.
+			match e2 (t2 ^^ s1)			>>= \s2.
+			let s3 = s2 O s1 in
+			mUnify (t ^^ s3) (resultType ^^s3)	>>= \s4.
+			return (s4 O s3)
 
 
+instance setTypes FunCall where
+	setTypes (FunCall id args _) = rtrn id + rtrn "(" + concat args (rtrn ", ") + rtrn ")"
 
+instance setTypes IdWithFields where
+	setTypes (WithField iwf field _) = 
+		let iwf` = setTypes e iwf of
+		
+	setTypes (JustId id _) 			= rtrn id*/
 
+typeCheckerTests :: [Testcase]
+typeCheckerTests = unify_tests ++ instanceOf_tests ++ match_tests
+
+Start w = runTests typeCheckerTests (const True) w
 
 
 

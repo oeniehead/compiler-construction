@@ -7,5 +7,5 @@ prettyPrint :: a -> String | toShow a
 
 class toShow a 	:: a 	-> Show
 
-instance toShow AST, Decl, VarDecl, FunDecl, Stmt, Expr, FunCall, Type,
+instance toShow AST, Decl, VarDecl, FunDecl, Stmt, Expr, FunCall, Type, TypeScheme,
 	IdWithFields, Field, BasicType, BinOp, UnOp

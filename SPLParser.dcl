@@ -6,31 +6,9 @@ import Error
 from Data.Either import :: Either
 import GenEq
 import GenString
+from Data.Set import :: Set
 
 parser :: [Token] -> Either [Error] AST
-
-// -- SPL
-:: AST :== [Decl]
-
-:: MetaData = { pos		:: Position
-			  , type	:: Maybe Type
-			  }
-
-instance zero MetaData
-
-setMetaType :: MetaData Type -> MetaData
-
-// -- Declarations
-:: Decl
-	= Var VarDecl		MetaData
-	| Fun FunDecl		MetaData
-
-:: VarDecl
-	= VarDecl (Maybe Type) Id Expr		MetaData
-
-:: FunDecl
-	= FunDecl Id [Arg] (Maybe Type) [VarDecl] [Stmt]	MetaData
-:: Arg :== Id
 
 
 // -- Types
@@ -39,7 +17,11 @@ setMetaType :: MetaData Type -> MetaData
 	| TupleType Type Type
 	| ArrayType Type
 	| IdentType Id
-	| FuncType [Type] (Maybe Type) // list of arguments and return type(voor verslag)
+	| FuncType [Type] (Maybe Type) // list of arguments and return type
+
+:: TypeScheme = TS (Set TypeVar) Type // the type with the bounded variables
+
+:: TypeVar  :== Id
 
 :: BasicType
 	= IntType
@@ -49,6 +31,44 @@ setMetaType :: MetaData Type -> MetaData
 bIntType  :== BasicType IntType
 bBoolType :== BasicType BoolType
 bCharType :== BasicType CharType
+
+// -- SPL
+:: AST :== [Decl]
+
+:: MetaData = { pos		:: Position
+			  , type	:: Maybe Type
+			  }
+
+:: MetaDataTS = { pos			:: Position
+				, typeScheme	:: Maybe TypeScheme
+				}
+
+instance zero MetaData
+
+setMetaType :: MetaData   Type			-> MetaData
+setMetaTS	:: MetaDataTS TypeScheme	-> MetaDataTS
+
+class getMeta a :: a -> MetaData
+class setMeta a :: a MetaData -> a 
+
+instance getMeta IdWithFields
+
+//instance setMeta
+
+// -- Declarations
+:: Decl
+	= Var VarDecl
+	| Fun FunDecl
+
+:: VarDecl
+	= VarDecl (Maybe Type) Id Expr		MetaData
+
+:: FunDecl
+	= FunDecl Id [Arg] (Maybe Type) [VarDecl] [Stmt]	MetaDataTS
+:: Arg :== Id
+
+
+
 
 // -- Statement
 
@@ -109,9 +129,9 @@ bCharType :== BasicType CharType
 
 :: Id :== String
 
-derive gEq		MetaData, Decl, VarDecl, FunDecl, Type, BasicType,
-				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field
-derive gString 	MetaData, Decl, VarDecl, FunDecl, Type, BasicType,
-				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field
-
+derive gEq		MetaData, MetaDataTS, Decl, VarDecl, FunDecl, Type, TypeScheme, BasicType,
+				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field, Set
+derive gString 	MetaData, MetaDataTS, Decl, VarDecl, FunDecl, Type, TypeScheme, BasicType,
+				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field, Set
+// Note: je kunt nu ook prettyPrint gebruiken
 

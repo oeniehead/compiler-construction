@@ -310,8 +310,8 @@ makeFreshVar = M \st.(Just $ "%var" +++(toString st.counter), {st & counter=st.c
 makeFreshIdentType :: MMonad Type
 makeFreshIdentType = fmap (\id.IdentType id) makeFreshVar
 
-error :: Position String -> MMonad a
-error pos msg = M \st.(Nothing, {st & errors = [makeError pos ERROR TypeChecking msg: st.errors]})
+error :: Position String -> MMonad ()
+error pos msg = M \st.(Just (), {st & errors = [makeError pos ERROR TypeChecking msg: st.errors]})
 debug pos msg = M \st.(Just (), {st & errors = [makeError pos DEBUG TypeChecking msg: st.errors]})
 
 getEnv :: MMonad Env
@@ -341,7 +341,7 @@ mUnify t1 t2 = case unify t1 t2 of
 	Just subst	=
 			changeEnv (\env. env ^^ subst)	>>|
 			addSubst subst
-	Nothing		= error zero ("Cannot unify " <++ t1 <++ " and " <++ t2) // TODO: position
+	Nothing		= error zero ("Cannot unify " <++ t1 <++ " and " <++ t2) >>| fail
 
 scope :: String (MMonad a) -> MMonad a
 scope s ma =
@@ -371,7 +371,7 @@ getVarType id =
 		Just t	= return t
 		_		= case 'm'.get id env.varTypes of
 			Just t	= return t
-			_		= error zero ("Variable '" +++ id +++ "' not defined")//TODO: position
+			_		= error zero ("Variable '" +++ id +++ "' not defined") >>| fail//TODO: position
 
 getFuncType :: Id -> MMonad TypeScheme
 getFuncType id =
@@ -381,7 +381,7 @@ getFuncType id =
 		Just t	= return t
 		_		= case 'm'.get id env.funcTypes of
 			Just t	= return t
-			_		= error zero ("Variable '" +++ id +++ "' not defined")//TODO: position
+			_		= error zero ("Variable '" +++ id +++ "' not defined") >>| fail//TODO: position
 
 //AMF instances
 mAp :: (MMonad (a -> b)) (MMonad a) -> MMonad b

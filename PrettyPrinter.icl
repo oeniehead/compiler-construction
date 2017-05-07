@@ -6,6 +6,8 @@ import Misc
 import Data.List
 import qualified Data.Set as s
 
+debug :== True
+
 prettyPrint :: a -> String | toShow a
 prettyPrint item = show (toShow item)
 
@@ -26,11 +28,11 @@ instance toShow Decl where
 	
 instance toShow VarDecl where
 	toShow (VarDecl mType id expr _) = 
-		typeShow + rtrn id + rtrn " = " + toShow expr + rtrn ";"
+		typeShow + rtrn " " + rtrn id + rtrn " = " + toShow expr + rtrn ";"
 	where
 		typeShow = case mType of
-			(Just type)	= toShow type + rtrn " "
-			Nothing		= rtrn "var "
+			(Just type)	= toShow type
+			Nothing		= rtrn "var"
 			
 instance toShow FunDecl where
 	toShow (FunDecl id args mType varDecls stmts _) =

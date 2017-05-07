@@ -1,0 +1,20 @@
+/* Some code in a comment
+
+   Void int ()
+   id = null;
+
+   if(x == < 6) {}
+*/
+
+// A strange name, but parsable
+CAPPS (X , S) :: Int Bool -> Void
+{
+	// Everthing on one line
+	X = 0; S = True; return;
+}
+
+tabbed () :: -> Void
+{
+	// Indented with tabs
+	return;
+}

@@ -83,7 +83,7 @@ runScanner :: String (Scanner a) -> (a, [Error])
 runScanner initStr (Scanner scan)
 # startState =
 	{ buffer	= initStr
-	, sPos		= zero
+	, sPos		= {line = 1, col = 0}
 	, log		= []
 	}
 # (a, st) = scan startState

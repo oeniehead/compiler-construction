@@ -1,0 +1,60 @@
+Int int1  = -3;
+Bool bool1 = True;
+Bool bool2 = False;
+[Int] list  = [];
+
+mainfunction() :: -> Void
+{   Int x = 0;
+    someType st = null;
+    x = x+10;
+    if( x <10) { function1(st, False); }
+    else { function1(st, True); }
+}
+
+// Some bla bla bla
+function1 (st, b) :: someType Bool -> Void
+{
+    if (bool1 && bool2 || bool2)
+        {int1 = 3 - 2 + 1;}
+    else
+        {int1 = 4 * 3 / 2 % 1;}
+}
+
+/* Some more 
+bla bla 
+bla
+*/
+function2 () :: -> (Bool, Int) 
+{
+    while ( int1 > 0 || int1 < 1 && 
+            int1 <= 0 || int1 >= 1 && 
+            int1 != -6)
+    {
+        list = int1:list;
+    }
+    return (!bool2, someFunction());
+}
+
+// The difference between True and true, False and false, Int and int etc. 
+integer (x, bools) :: int int -> Void
+{
+    id = id;
+    boolean = null;
+
+}
+Bool z = true;
+Bool w = False;
+boolean () :: -> Void
+{
+Bool b= true;
+b = fasle;
+}
+Bool z = true;
+Bool w = False;
+boolean ()
+{
+Bool b= true;
+b = fasle;
+}
+
+

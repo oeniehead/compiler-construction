@@ -18,6 +18,7 @@ import Misc
 import PrettyPrinter
 import Data.Either
 import BindingAnalysis
+import CodeGenerator
 
 
 getCl :: IO [String]

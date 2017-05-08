@@ -46,19 +46,11 @@ doAnalysis graph [declaration : declarations] =
 	in	combineGraphs items (doAnalysis items declarations)
 	
 buildGraph :: OrderGraph Decl -> OrderGraph
-buildGraph g (Var v _) = doOrder g v
-buildGraph g (Fun f _) = doOrder g f
+buildGraph g (Var v) = doOrder g v
+buildGraph g (Fun f) = doOrder g f
 
 combineGraphs :: OrderGraph OrderGraph -> OrderGraph
 combineGraphs (a, b, c) (i, j, k) = (a ++ i, b ++ j, c ++ k)
-
-test :: AST
-test = [
-		(Fun (FunDecl "c" [] Nothing [] [(StmtRet (ExpInt 1 {pos={line=2 ,col=8} ,type=Nothing}) {pos={line=2 ,col=1} ,type=Nothing})] {pos={line=0 ,col=0} ,type=Nothing}) {pos={line=0 ,col=0} ,type=Nothing}),
-		(Fun (FunDecl "c" [] Nothing [] [(StmtRet (ExpInt 1 {pos={line=7 ,col=8} ,type=Nothing}) {pos={line=7 ,col=1} ,type=Nothing})] {pos={line=5 ,col=0} ,type=Nothing}) {pos={line=5 ,col=0} ,type=Nothing})
-	]
-	
-Start = doAnalysis ([], [], []) test
 	
 /*
 Build graph from VarDecl:
@@ -90,7 +82,7 @@ Build graph from FunDecl:
 	- A cycle in functions means recursion, for now we do not allow that
 */
 instance doOrder FunDecl where
-	doOrder graph (FunDecl name arguments type variables statements {MetaData| pos = pos, type = _}) = 
+	doOrder graph (FunDecl name arguments type variables statements {MetaDataTS| pos = pos, typeScheme = _}) = 
 		let 
 			me = FuncItem name pos
 			returns = returnsValue pos statements
@@ -413,9 +405,9 @@ getOrderedAST ast 	[a : b] =
 	in	[item : getOrderedAST rest b]
 	
 getASTPosition :: AST OrderItem -> Int
-getASTPosition [(Var (VarDecl _ name _ _) _) : b] item=:(VarItem name2 _) = if (name == name2) (0) (1 + (getASTPosition b item))
-getASTPosition [(Fun (FunDecl name _ _ _ _ _) _) : b] item=:(FuncItem name2 _) = if (name == name2) (0) (1 + (getASTPosition b item))
-getASTPosition [(Fun (FunDecl name _ _ _ _ _) _) : b] item=:(CallsItem name2 _ _ _) = if (name == name2) (0) (1 + (getASTPosition b item))
+getASTPosition [(Var (VarDecl _ name _ _)) : b] item=:(VarItem name2 _) = if (name == name2) (0) (1 + (getASTPosition b item))
+getASTPosition [(Fun (FunDecl name _ _ _ _ _)) : b] item=:(FuncItem name2 _) = if (name == name2) (0) (1 + (getASTPosition b item))
+getASTPosition [(Fun (FunDecl name _ _ _ _ _)) : b] item=:(CallsItem name2 _ _ _) = if (name == name2) (0) (1 + (getASTPosition b item))
 getASTPosition [_ : b] item = 1 + (getASTPosition b item)
 
 doBindingAnalysis :: AST -> Either AST [Error]

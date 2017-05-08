@@ -16,8 +16,16 @@ instance zero		Position
 
 nextPos :: Position Char -> Position
 
-toBeImplemented :: .a
+toBeImplemented :== tbi
+tbi :: .a
 
-concat :: [String] -> String
-(separatedBy) infixl :: [a] a -> [a] // [1,2,3] separatedBy 0 = [1,0,2,0,3]
-delimit :: [String] String -> String // delimit ["a", "b"] ", " = "a, b"
+(separatedBy)	infixl		:: [a] a			-> [a] // [1,2,3] separatedBy 0 = [1,0,2,0,3]
+
+(<++)			infixl 9	:: String a		-> String | toString a
+concat						:: [a] 			-> String | toString a
+delimit						:: [a] String	-> String | toString a
+(delimitBy)		infixl		:: [a] String	-> String | toString a
+// delimit ["a", "b"] ", " = "a, b"
+
+
+printAllnl :: [a] -> String | toString a

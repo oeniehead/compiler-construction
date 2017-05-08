@@ -20,6 +20,5 @@ instance toString Error		where
 			 , "(" +++ toString stage +++ "): "
 			 , message
 			 ]
-
 instance toString Stage		where toString s = gString{|*|} s
 instance toString Severity	where toString s = gString{|*|} s

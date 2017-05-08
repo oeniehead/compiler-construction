@@ -4,6 +4,9 @@ import Indentation
 import SPLParser
 import Misc
 import Data.List
+import qualified Data.Set as s
+
+debug :== True
 
 prettyPrint :: a -> String | toShow a
 prettyPrint item = show (toShow item)
@@ -20,16 +23,16 @@ instance toShow AST where
 	toShow [a: b] 	= toShow a + nl + toShow b
 	
 instance toShow Decl where
-	toShow (Var varDecl _)	= toShow varDecl
-	toShow (Fun funDecl _)	= toShow funDecl
+	toShow (Var varDecl)	= toShow varDecl
+	toShow (Fun funDecl)	= toShow funDecl
 	
 instance toShow VarDecl where
 	toShow (VarDecl mType id expr _) = 
-		typeShow + rtrn id + rtrn " = " + toShow expr + rtrn ";"
+		typeShow + rtrn " " + rtrn id + rtrn " = " + toShow expr + rtrn ";"
 	where
 		typeShow = case mType of
-			(Just type)	= toShow type + rtrn " "
-			Nothing		= rtrn "var "
+			(Just type)	= toShow type
+			Nothing		= rtrn "var"
 			
 instance toShow FunDecl where
 	toShow (FunDecl id args mType varDecls stmts _) =
@@ -96,6 +99,11 @@ instance toShow Type where
 		concatArgs []		= rtrn ""
 		concatArgs [t]		= toShow` t True
 		concatArgs [t:ts]	= toShow` t True + rtrn " " + concatArgs ts
+
+instance toShow TypeScheme where
+	toShow (TS boundedVars t) =
+		rtrn ("A." +++ (delimit ('s'.toList boundedVars) " ") +++ ": ")
+		+ (toShow t)
 
 instance toShow IdWithFields where
 	toShow (WithField id field _) = (toShow id) + (toShow field)

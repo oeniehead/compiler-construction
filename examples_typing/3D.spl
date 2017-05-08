@@ -1,0 +1,7 @@
+transpose (p1,p2) :: (Int, (Int, Int))  (Int, (Int, Int))   -> (Int, (Int, Int)) {
+	return ((p1.fst + p2.fst), (first(p1.snd) + first(p2.snd), p1.snd.snd + p2.snd.snd));
+}
+
+scale(p, scalar) :: (Int, Int) Int -> (Int, Int) {
+	return (p.fst * scalar, (first(p.snd) * scalar, p.snd.snd * scalar));
+}

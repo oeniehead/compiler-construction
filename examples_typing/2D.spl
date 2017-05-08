@@ -1,0 +1,13 @@
+foo (n) :: Int -> (Int, Int)
+{
+	return (2, 2);
+}
+
+transpose (p1, p2) :: (Int, Int) (Int, Int) -> (Int, Int)
+{
+	return ((p1.fst + p2.fst), (p1.snd + p2.snd));
+}
+
+scale(p, scalar) :: (Int, Int) Int -> (Int, Int) {
+	return (p.fst * scalar, p.snd * scalar);
+}

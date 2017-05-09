@@ -58,6 +58,7 @@ main =
 					case result of
 						(Right bErrors) = print "Binding Errors:" >>| printAll bErrors
 						(Left ast)		= print (prettyPrint ast)
+	
 					
 					
 	

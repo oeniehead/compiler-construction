@@ -26,7 +26,8 @@ makeError :: Position Severity Stage String -> Error
 	= Scanning
 	| Parsing
 	| Binding
-	| TypeChecking 
+	| TypeChecking
+	| CodeGeneration 
 	// etc.
 
 derive gString Stage, Severity

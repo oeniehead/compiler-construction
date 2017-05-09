@@ -30,7 +30,7 @@ from StdList import
 	++, flatten, isEmpty, hd, tl, last, init,
 	take, takeWhile, drop, dropWhile, span, reverse, insertAt, removeAt, updateAt, splitAt,
 	map, iterate, indexList, repeatn, repeat, unzip, zip2, zip, diag2, diag3,
-	foldl, foldr, scan, and, or, any, all,
+	foldl, foldr, scan, and, or, any, all, filter,
 	isMember, isAnyMember, removeMember, removeMembers, removeDup, removeIndex, limit,
 	sum, prod, avg
 

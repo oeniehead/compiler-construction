@@ -60,6 +60,7 @@ class getMeta a :: a -> MetaData
 class setMeta a :: a MetaData -> a 
 
 instance getMeta IdWithFields
+instance getMeta Expr
 
 class mapMeta a :: (MetaData -> MetaData) (MetaDataTS -> MetaDataTS) a -> a
 

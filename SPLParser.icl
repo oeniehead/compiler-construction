@@ -28,6 +28,17 @@ setMetaTS meta ts = {meta & typeScheme = Just ts}
 instance getMeta IdWithFields where
 	getMeta (WithField _ _ m) = m
 	getMeta (JustId _ m) = m
+	
+instance getMeta Expr where
+	getMeta (ExpIdent _ m) = m
+	getMeta (ExpBinOp _ _ _ m) = m
+	getMeta (ExpUnOp _ _ m) = m
+	getMeta (ExpInt _ m) = m
+	getMeta (ExpChar _ m) = m
+	getMeta (ExpBool _ m) = m
+	getMeta (ExpFunCall _ m) = m
+	getMeta (ExpEmptyArray m) = m
+	getMeta (ExpTuple _ _ m) = m
 
 derive gEq		MetaData, MetaDataTS, Decl, VarDecl, FunDecl, Type, TypeScheme, BasicType,
 				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field, Set

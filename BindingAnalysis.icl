@@ -6,6 +6,7 @@ import StdGeneric
 import GenString
 import Error
 import StdList
+from Data.Func import $
 
 import StdDebug
 
@@ -37,6 +38,22 @@ buildInFunctions = [
 	| Never
 	
 :: ReturnResult :== (Either ReturnBehaviour Error)
+
+uptoBinding ::
+	String
+	([Error] -> Maybe a)
+	([Error] -> a)
+	([Error] -> a)
+		-> Either a (AST, [Error])
+uptoBinding prog fscanErrors fparseErrors fbindingErrors =
+	case uptoParse prog fscanErrors fparseErrors of
+		Left a	= Left a
+		Right (ast, parseErrors) =
+			let result = doBindingAnalysis ast
+			in case result of
+				Left errors = Left $ fbindingErrors (parseErrors ++ errors)
+				Right ast = Right (ast, parseErrors)
+
 
 doAnalysis :: OrderGraph AST -> OrderGraph
 doAnalysis _ [] = ([], [], [])
@@ -410,15 +427,15 @@ getASTPosition [(Fun (FunDecl name _ _ _ _ _)) : b] item=:(FuncItem name2 _) = i
 getASTPosition [(Fun (FunDecl name _ _ _ _ _)) : b] item=:(CallsItem name2 _ _ _) = if (name == name2) (0) (1 + (getASTPosition b item))
 getASTPosition [_ : b] item = 1 + (getASTPosition b item)
 
-doBindingAnalysis :: AST -> Either AST [Error]
+doBindingAnalysis :: AST -> Either [Error] AST
 doBindingAnalysis ast =
 	case (doAnalysis ([], [], []) ast) of
 		graph=:(relations, signatures, []) = case doUnusedAnalysis graph of
 			[] = case doCycleAnalysis graph of
-				[] 	= (Left (doOrderDeclarations graph ast))
-				errors = (Right errors)
-			errors = (Right errors)
-		(_, _, errors) = (Right errors)
+				[] 	= (Right (doOrderDeclarations graph ast))
+				errors = (Left errors)
+			errors = (Left errors)
+		(_, _, errors) = (Left errors)
 
 
 

@@ -1,12 +1,7 @@
 c ()
 {
-	return 1;
-}
-
-c ()
-{
 	var x = 1;
-	var x = 1;
+	var y = 1;
 	return 1;
 }
 

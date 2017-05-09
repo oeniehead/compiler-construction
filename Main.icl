@@ -56,8 +56,8 @@ main =
 					print "Binding:"			>>|
 					return (doBindingAnalysis ast) >>= \result.
 					case result of
-						(Right bErrors) = print "Binding Errors:" >>| printAll bErrors
-						(Left ast)		= print (prettyPrint ast)
+						(Left bErrors) = print "Binding Errors:" >>| printAll bErrors
+						(Right ast)		= print (prettyPrint ast)
 	
 					
 					

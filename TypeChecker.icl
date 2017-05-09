@@ -6,6 +6,7 @@ import Misc
 import Error
 import Spec
 import PrettyPrinter
+import BindingAnalysis
 
 from StdList import and, all, zip, ++, hd, isMember, zip2
 from Data.Func import $
@@ -464,15 +465,16 @@ uptoTypeInference ::
 	([Error] -> Maybe a)
 	([Error] -> a)
 	([Error] -> a)
+	([Error] -> a)
 		-> Either a (AST, [Error])
-uptoTypeInference prog fscanErrors fparseErrors ftypeErrors =
-	case uptoParse prog fscanErrors fparseErrors of
+uptoTypeInference prog fscanErrors fparseErrors fbindingErrors ftypeErrors =
+	case uptoBinding prog fscanErrors fparseErrors fbindingErrors of
 		Left a	= Left a
-		Right (ast, scanErrors) =
+		Right (ast, bindingErrors) =
 			let (mAST, typeErrors) = typeInference ast
 			in case mAST of
-				Nothing  = Left $ fparseErrors (scanErrors ++ typeErrors)
-				Just ast = Right (ast, scanErrors ++ typeErrors)
+				Nothing  = Left $ fparseErrors (bindingErrors ++ typeErrors)
+				Just ast = Right (ast, bindingErrors ++ typeErrors)
 
 instance matchN AST where
 	matchN ast = matchAllN ast

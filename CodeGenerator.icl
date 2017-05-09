@@ -7,9 +7,20 @@ import Control.Applicative
 import Control.Monad
 import Data.Either
 
-import CustomStdEnv
+from StdList import filter
 
 import qualified Data.Map as m
+
+import StdGeneric
+import GenString
+
+import TypeChecker
+from Data.Func import $
+
+derive gString CGArg, CGInst
+
+instance toString CGArg where toString x = gString{|*|} x
+instance toString CGInst where toString x = gString{|*|} x
 
 :: CGMonad a = CG (CGMonadState -> (Maybe a, CGMonadState))
 :: CGMonadState = {
@@ -45,6 +56,10 @@ instance zero CGMonadState
 				currentFunction = "",
 				counter = 0
 			}
+			
+
+
+
 /**
 	Heap management:
 		- Heap pointer HP points to next empty value on the heap.
@@ -91,6 +106,23 @@ instance Applicative CGMonad where
 	(<*>) cgf cga = cgAp cgf cga
 instance Functor CGMonad where
 	fmap f cga = cgAp (return f) cga
+	
+uptoCodeGeneration ::
+	String
+	([Error] -> Maybe a)
+	([Error] -> a)
+	([Error] -> a)
+	([Error] -> a)
+	([Error] -> a)
+		-> Either a ([CGInst], [Error])
+uptoCodeGeneration prog fscanErrors fparseErrors fbindingErrors ftypeErrors fcodeErrors  =
+	case uptoTypeInference prog fscanErrors fparseErrors fbindingErrors ftypeErrors of
+		Left a	= Left a
+		Right (ast, typeErrors) =
+			let result = runCodeGenerator ast
+			in case result of
+				Right errors = Left $ fcodeErrors (typeErrors ++ errors)
+				Left instructions = Right (instructions, typeErrors)
 
 	
 runCodeGenerator :: AST -> Either [CGInst] [Error]

@@ -54,7 +54,8 @@ instance ^^ Type where
 		BasicType b		= BasicType b
 		TupleType t1 t2	= TupleType (t1 ^^ subst) (t2 ^^ subst)
 		ArrayType t		= ArrayType (t ^^ subst)
-		FuncType args r = FuncType (map (\arg.arg ^^ subst) args) (mapMaybe (\type.type ^^ subst) r)
+		FuncType args r = FuncType (map (\arg.arg ^^ subst) args) (r ^^ subst)
+		VoidType		= VoidType
 
 instance ^^ TypeScheme where
 	(^^) (TS boundedVars type) subst = TS boundedVars type` where
@@ -63,7 +64,8 @@ instance ^^ TypeScheme where
 			BasicType b		= BasicType b
 			TupleType t1 t2	= TupleType (t1 ^^ subst) (t2 ^^ subst)
 			ArrayType t		= ArrayType (t ^^ subst)
-			FuncType args r = FuncType (map (\arg.arg ^^ subst) args) (mapMaybe (\type.type ^^ subst) r)
+			FuncType args r = FuncType (map (\arg.arg ^^ subst) args) (r ^^ subst)
+			VoidType		= VoidType
 
 //instance ^^ Type where
 //	(^^) type subst = type`
@@ -97,11 +99,8 @@ instance freeVars Type where
 		TupleType t1 t2				= union (freeVars t1) (freeVars t2)
 		ArrayType t					= freeVars t
 		IdentType id				= singleton id
-		FuncType argTypes retType	= union x (unions (map freeVars argTypes))
-			where
-				x = case retType of
-					Just type	= freeVars type
-					Nothing		= newSet
+		FuncType argTypes retType	= unions (map freeVars [retType:argTypes])
+		VoidType					= newSet
 
 instance freeVars TypeScheme where
 	freeVars (TS boundedVars type) = difference (freeVars type) boundedVars
@@ -143,12 +142,9 @@ rename` (IdentType id1) (IdentType id2) env =
 				Nothing
 				(Just ('m'.put id1 id2 env))
 rename` (FuncType argTypes1 rType1) (FuncType argTypes2 rType2) env =
-	(case (rType1, rType2) of
-		(Nothing, Nothing)	= Just env
-		(Just r1, Just r2)	= rename` r1 r2 env
-		_					= Nothing
-	) >>= \e2.
+	rename` rType1 rType2 env >>= \e2.
 	renameAll argTypes1 argTypes2 e2
+rename` VoidType VoidType env = Just env
 rename` _ _ env = Nothing
 
 renameAll :: [Type] [Type] Renaming -> Maybe Renaming
@@ -167,10 +163,7 @@ isomorphic a b = isJust (rename a b)
 // --
 unify :: Type Type -> Maybe Subst
 unify (BasicType b1) (BasicType b2)			= if (b1 === b2) (Just idSubst) Nothing
-unify (TupleType t1 t2) (TupleType t1` t2`)	=
-	unify t1 t1`								>>= \subst.
-	unify (t2 ^^ subst) (t2` ^^ subst)	>>= \subst2.
-	return (subst2 O subst)
+unify (TupleType t1 t2) (TupleType t1` t2`)	= unifyAll [(t1, t1`), (t2, t2`)]
 unify (ArrayType t1) (ArrayType t2)			= unify t1 t2
 // IdentType cases
 unify (IdentType i) (BasicType b)			= Just $ substitute i (BasicType b)
@@ -180,25 +173,21 @@ unify (IdentType i) t	= if (member i (freeVars t))
 									(Just (substitute i t))
 // IdentType in the other argument is symmetric:
 unify t (IdentType i)						= unify (IdentType i) t
-/*unify t (IdentType i)	= if (member i (freeVars t))
-									Nothing
-									(Just (substitute i t))*/
-unify f1=:(FuncType _ _) f2=:(FuncType _ _) = uFuncType f1 f2 idSubst
-where
-	uFuncType (FuncType [a:as] mr1) (FuncType [b:bs] mr2) prevSubst = // a helper function with the substitution until now
-		unify (a ^^ prevSubst) (b ^^ prevSubst)		>>= \subst.
-		let newSubst = subst O prevSubst in
-		(uFuncType (FuncType as mr1) (FuncType bs mr2) newSubst)
-	uFuncType (FuncType [] mr1) (FuncType [] mr2) prevSubst =
-		case (mr1,mr2) of
-		(Just _ , Nothing)	= Nothing
-		(Nothing, Just _ )	= Nothing
-		(Nothing, Nothing)	= Just prevSubst
-		(Just r1, Just r2)	= unify (r1 ^^ prevSubst) (r2 ^^ prevSubst) >>= \subst.
-				return (subst O prevSubst)
-	uFuncType _ _ _ = Nothing
-//unify _				_						= Nothing
-unify a b = Nothing
+unify (FuncType a1 r1) (FuncType a2 r2)
+| length a1 == length a2	= unifyAll [(r1, r2) : zip2 a1 a2]
+| otherwise					= Nothing
+unify VoidType		VoidType				= Just idSubst
+unify _				_						= Nothing
+
+unifyAll :: [(Type, Type)] -> Maybe Subst
+unifyAll types =
+	foldM 
+		(\subst (t1,t2).
+			unify (t1 ^^ subst) (t2 ^^ subst)	>>= \newSubst.
+			return (newSubst O subst)
+		)
+		idSubst
+		types
 
 // Is there a substitution s such that t1 is isomorphic to t2 ^^ s?
 class (instanceOf) infix 4 a :: a a -> Bool
@@ -218,27 +207,23 @@ instanceOf_tests =
 	, Testcase "A.a:a b [(b,int)] -> ([a], (b,int)) instanceOf A.a:a b [c] -> ([a], c)" $
 		assert $ specificTypeScheme instanceOf generalTypeScheme
 	, Testcase "" $ assert $
-			(TS (fromList ["%var0"]) $ FuncType [IdentType "%var0"] (Just $ IdentType "%var0"))
+			(TS (fromList ["%var0"]) $ FuncType [IdentType "%var0"] (IdentType "%var0"))
 			instanceOf
-			(TS (fromList ["a"]) $ FuncType [IdentType "a"] (Just $ IdentType "a"))
+			(TS (fromList ["a"]) $ FuncType [IdentType "a"] (IdentType "a"))
 	]
 where
 	specificType =
 		FuncType [ IdentType "a", IdentType "b", ArrayType (TupleType (IdentType "b") bIntType)]
-			(Just
 				(TupleType
 					(ArrayType (IdentType "a"))
 					(TupleType (IdentType "b") bIntType)
 				)
-			)
 	generalType =
 			FuncType [ IdentType "a", IdentType "b", ArrayType (IdentType "c")]
-				(Just
 					(TupleType
 						(ArrayType (IdentType "a"))
 						(IdentType "c")
 					)
-				)
 	specificTypeScheme	= TS (fromList ["a"]) specificType
 	generalTypeScheme	= TS (fromList ["a"]) generalType
 		
@@ -254,7 +239,7 @@ unify_tests =
 	[ Testcase "Same Types:" $
 		assert $ and [prop_unify x x \\ y <- [IntType, BoolType, CharType]
 									  , x <- [BasicType y, TupleType a b, ArrayType a,
-											  a, FuncType [a,b] Nothing, FuncType [] (Just a)]
+											  a, FuncType [a,b] VoidType, FuncType [] a]
 					 ]
 	, Testcase "Different IdentType:" $
 		assert $ prop_unify a b
@@ -280,11 +265,11 @@ where
 	d = IdentType "d"
 	e = IdentType "e"
 	f = IdentType "f"
-	compBad	= FuncType [TupleType a a, ArrayType c				, e] (Just (BasicType IntType))
-	comp1	= FuncType [TupleType a a, c						, e] (Just (BasicType IntType))
-	comp2	= FuncType [b,			 ArrayType (ArrayType d)	, b] (Just f)
-	compArg	= FuncType [TupleType a a, c						   ] (Just (BasicType IntType))
-	compRet	= FuncType [TupleType a a, c						, e] Nothing
+	compBad	= FuncType [TupleType a a, ArrayType c				, e] bIntType
+	comp1	= FuncType [TupleType a a, c						, e] bIntType
+	comp2	= FuncType [b,			 ArrayType (ArrayType d)	, b] f
+	compArg	= FuncType [TupleType a a, c						   ] bIntType
+	compRet	= FuncType [TupleType a a, c						, e] VoidType
 
 
 // --
@@ -519,9 +504,9 @@ instance matchN FunDecl where
 		//debug zero ("Final type of " +++ returnVar +++ "@" +++ fname +++ ": " +++ (prettyPrint returnVarType)) >>|
 		let returnType =
 				case returnVarType of
-					IdentType "%noInfo"	= Nothing //Don't use returnVar here: clean will think that it is
-					IdentType "%void"	= Nothing // a new type variable and will always pattern-match
-					_					= Just returnVarType
+					IdentType "%noInfo"	= VoidType //Don't use returnVar here: clean will think that it is
+					IdentType "%void"	= VoidType // a new type variable and will always pattern-match
+					_					= returnVarType
 		in
 		let
 			funcType = FuncType argTypes` returnType
@@ -688,15 +673,13 @@ instance match Expr where
 instance match FunCall where
 	match (FunCall name args m) t =
 		getFuncType name									>>= \(TS boundedTypes fType).
-		debug zero ("Retrieved type of " +++ name +++ ": " +++ (toString (TS boundedTypes fType))) >>|
+		//debug zero ("Retrieved type of " +++ name +++ ": " +++ (toString (TS boundedTypes fType))) >>|
 		makeInstanceFuncType (toList boundedTypes) fType	>>= \(FuncType argTypes rType).
-		debug zero ("Generated instance function type: " +++ (prettyPrint (FuncType argTypes rType))) >>|
+		//debug zero ("Generated instance function type: " +++ (prettyPrint (FuncType argTypes rType))) >>|
 		matchAll (zip2 args argTypes)						>>= \(subst, args`).
-		debug zero ("Unified   instance function type: " +++ (toString (TS boundedTypes fType))) >>|
-		case rType of
-			Nothing	= return (subst, FunCall name args` $ setMetaType m t)
-			Just r	= mUnify (t ^^ subst) (r ^^ subst)	>>= \s1.
-					return (s1 O subst, FunCall name args` $ setMetaType m t)
+		//debug zero ("Unified   instance function type: " +++ (toString (TS boundedTypes fType))) >>|
+		mUnify (t ^^ subst) (rType ^^ subst)				>>= \s1.
+		return (s1 O subst, FunCall name args` $ setMetaType m t)
 // twee doelen:
 // checken of typing klopt 
 //		f :: A.a:[Int] a [a] -> a
@@ -823,13 +806,13 @@ match_tests =  (checkVars p1 	[ ("x", bIntType)])
 			++ (checkProg p5	[ ("x1@f2", bIntType)
 								, ("l@f4", ArrayType bIntType)
 								]
-								[ ("f1", TS (fromList []) $ FuncType [] (Just bIntType))
-								, ("f2", TS (fromList []) $ FuncType [] Nothing)
-								, ("f3", TS (fromList []) $ FuncType [ArrayType bIntType] Nothing)
-								, ("f4", TS (fromList []) $ FuncType [] Nothing)
+								[ ("f1", TS (fromList []) $ FuncType [] bIntType)
+								, ("f2", TS (fromList []) $ FuncType [] VoidType)
+								, ("f3", TS (fromList []) $ FuncType [ArrayType bIntType] VoidType)
+								, ("f4", TS (fromList []) $ FuncType [] VoidType)
 								])
 			++ (checkProg p6	[]
-								[ ("f1", TS (fromList ["a"]) $ FuncType [IdentType "a"] (Just $ IdentType "a"))
+								[ ("f1", TS (fromList ["a"]) $ FuncType [IdentType "a"] (IdentType "a"))
 								])
 //			++ [(hd (checkVars pi [])) shouldFailWith ("Type inference failed."
 //							+/ "ERROR[0,0] (TypeChecking): Cannot unify (BasicType IntType) and (BasicType CharType)")]

@@ -25,7 +25,8 @@ uptoParse :: String ([Error] -> Maybe a) ([Error] -> a) -> Either a (AST,[Error]
 	| TupleType Type Type
 	| ArrayType Type
 	| IdentType Id
-	| FuncType [Type] (Maybe Type) // list of arguments and return type
+	| FuncType [Type] Type // list of arguments and return type
+	| VoidType
 
 :: TypeScheme = TS (Set TypeVar) Type // the type with the bounded variables
 

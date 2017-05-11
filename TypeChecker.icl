@@ -540,11 +540,14 @@ instance matchN FunDecl where
 		return (subst, FunDecl fname args Nothing vs` ss` $ setMetaTS m typeScheme)
 	/*
 	Probleem bij recursief typechecken:
-	f(a,b){ // type: A.a: a Bool -> a
+	p = []; // Type [Bool]
+	
+	f(a,b,c){ // type: A.a: a Bool [Bool] -> a
 		if(b){
-			int x = f(10,False);//Hier weet je het type van f nog niet goed genoeg!
+			int x = f(10,False,[]);//Hier weet je het type van f nog niet goed genoeg!
 			print x;
-			bool y = f(10,False);//Dit zou fout moeten gaan!
+			bool y = f(10,False,p);//Dit zou fout moeten gaan!
+			c = True : [];
 		} else {
 			return a;
 		}

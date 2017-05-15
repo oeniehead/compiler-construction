@@ -58,18 +58,14 @@ instance ^^ Type where
 		VoidType		= VoidType
 
 instance ^^ TypeScheme where
-	(^^) (TS boundedVars type) subst = TS boundedVars type` where
-		type` = case type of
+	(^^) (TS boundedVars type) subst = TS boundedVars (transform type) where
+		transform type = case type of
 			IdentType id	= if (member id boundedVars) (IdentType id) (subst id) // Don't substitute the bounded type variables
 			BasicType b		= BasicType b
-			TupleType t1 t2	= TupleType (t1 ^^ subst) (t2 ^^ subst)
-			ArrayType t		= ArrayType (t ^^ subst)
-			FuncType args r = FuncType (map (\arg.arg ^^ subst) args) (r ^^ subst)
+			TupleType t1 t2	= TupleType (transform t1) (transform t2)
+			ArrayType t		= ArrayType (transform t)
+			FuncType args r = FuncType (map transform args) (transform r)
 			VoidType		= VoidType
-
-//instance ^^ Type where
-//	(^^) type subst = type`
-//		where TS _ type` = (TS [] type) ^^ subst
 
 // Hiding the actual environment type:
 

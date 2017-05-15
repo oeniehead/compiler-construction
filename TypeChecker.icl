@@ -478,15 +478,17 @@ instance matchN VarDecl where
 		addVarType name (type ^^ subst)				>>|
 		return (subst, VarDecl Nothing name e` $ setMetaType m type)
 	matchN (VarDecl (Just specifiedType) name e m) =
-		matchN (VarDecl Nothing name e m)	>>= \(subst, v`).
+		matchN (VarDecl Nothing name e m)	>>= \(subst, VarDecl _ name` e` m`).
 		getVarType name						>>= \derivedType.
 		if (specifiedType instanceOf derivedType)
 			(	addVarType name specifiedType >>|
-			 	return (subst, v`)
+			 	return (subst, VarDecl (Just specifiedType) name` e` m`)
 			)
 			(	error m.MetaData.pos ("Specified type '" <++ specifiedType
 					<++"' conflicts with derived type '" <++ derivedType <++ "'(specified type may be too general)") >>|
-				fail
+				makeFreshIdentType							>>= \fresh. // Continue type checking with fresh variable
+				addVarType name fresh						>>|
+			 	return (subst, VarDecl (Just specifiedType) name` e` m`)
 			)
 
 	/*
@@ -521,18 +523,24 @@ noInfoType	:== IdentType "%noInfo"
 instance matchN FunDecl where
 	matchN fd=:(FunDecl fname args Nothing varDecls stmts m) =
 		forM args (\_ -> makeFreshIdentType) >>= \argTypes.
-		let instanceFuncType = FuncType argTypes noInfoType in
-		matchFunDecl fd (TS newSet instanceFuncType) instanceFuncType
+		let freshFuncType = FuncType argTypes noInfoType in
+		matchFunDecl fd (TS newSet freshFuncType) freshFuncType
 	matchN fd=:(FunDecl fname args (Just specifiedType) varDecls stmts m) =
-		matchFunDecl fd	(TS (freeVars specifiedType) specifiedType) (specifiedType)
+		forM args (\_ -> makeFreshIdentType) >>= \argTypes.
+		let freshFuncType = FuncType argTypes noInfoType in
+		matchFunDecl fd	(TS (freeVars specifiedType) specifiedType) (freshFuncType)
 													>>= \(subst, FunDecl fname` args` n` varDecls` stmts` m`).
 		getFuncType fname							>>= \derivedTS=:(TS _ derivedType).
-		if (specifiedType instanceOf derivedType)// misschien hier checken op typescheme ipv type?
+		if (specifiedType instanceOf derivedType)
 			(addFuncType fname 
 				(TS (freeVars specifiedType) specifiedType) >>|
 			return (subst, FunDecl fname` args` n` varDecls` stmts` $ setMetaTS m` (TS (freeVars specifiedType) specifiedType)))
 			(error m.MetaDataTS.pos ("Specified type '" <++ specifiedType
-					<++"' conflicts with derived type '" <++ derivedTS <++ "'(specified type may be too general)") >>| fail)
+					<++"' conflicts with derived type '" <++ derivedTS <++ "'(specified type may be too general)") >>|
+			addFuncType fname 
+				(TS (freeVars freshFuncType) freshFuncType) >>|
+			return (subst, FunDecl fname` args` n` varDecls` stmts` $ setMetaTS m` (TS (freeVars specifiedType) specifiedType))
+			)
 
 // Arguments:
 // - FunDecl:		the FunDecl

@@ -188,19 +188,17 @@ parseIds = (
 
 parseFunType :: Parser Token Type
 parseFunType =
-	pMany parseType							>>= \argTypes.
-	pSatisfyTokenType TypeArrow				>>|
-	(
-			( pSatisfyStringToken ["Void"] >>|
-			  pYield (FuncType argTypes Nothing		   ) )
-		<<|>
-			( parseType	>>= \retType.
-			  pYield (FuncType argTypes (Just retType) ) )
-	)
+	pMany parseType					>>= \argTypes.
+	pSatisfyTokenType TypeArrow		>>|
+	parseType						>>= \retType.
+	pYield (FuncType argTypes retType)
 
 parseType :: Parser Token Type
-parseType = pBasicType <<|> pTupleType <<|> pArrayType <<|> pIdentType
+parseType = pVoidType <<|> pBasicType <<|> pTupleType <<|> pArrayType <<|> pIdentType
 where
+	pVoidType =
+		pSatisfyStringToken ["Void"] >>|
+		return VoidType
 	pBasicType = BasicType <$> parseBasicType
 	pTupleType =
 		pSatisfyBrace Open Round	>>|

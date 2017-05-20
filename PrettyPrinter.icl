@@ -86,15 +86,15 @@ instance toShow Type where
 	toShow type = toShow` type False
 	where
 		toShow` :: Type Bool -> Show // Bool indicates if brackets might be needed
-		toShow` (BasicType type) _				= toShow type
+		toShow` (BasicType btype) _				= toShow btype
 		toShow` (TupleType typeA typeB) _		= rtrn "(" + toShow typeA + rtrn ", " + toShow typeB + rtrn ")"
 		toShow` (ArrayType type) _				= rtrn "[" + toShow type + rtrn "]"
 		toShow` (IdentType id) _				= rtrn id
-		toShow` funcType				 True	= rtrn "(" + toShow` funcType False + rtrn ")"
-		toShow` (FuncType args mType)	 False	= concatArgs args + rtrn " -> " + 
-													case mType of
-														Nothing	= rtrn "Void"
-														Just t	= toShow` t False
+		toShow` VoidType	 				_	= rtrn "Void"
+		toShow` (FuncType args ret)	 	False	= concatArgs args + rtrn " -> " + toShow` ret True
+		toShow` funcType				True	= rtrn "(" + toShow` funcType False + rtrn ")"
+
+	 
 		concatArgs :: [Type] -> Show
 		concatArgs []		= rtrn ""
 		concatArgs [t]		= toShow` t True

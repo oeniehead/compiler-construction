@@ -1,8 +1,14 @@
-c ()
+var a = [];
+var b = 'h' : 'a' : 'l' : 'l' : 'o' : a;
+
+main ()
 {
-	var x = 1;
-	var y = 1;
-	return 1;
+	var d = 1;
+	var c = b.tl;
+	
+	c.tl = d;
+
+	return a;
 }
 
 

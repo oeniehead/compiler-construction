@@ -17,7 +17,7 @@ import GenString
 import TypeChecker
 from Data.Func import $
 
-derive gString CGArg, CGInst
+derive gString CGArg, CGInst, CGRegister
 
 instance toString CGArg where toString x = gString{|*|} x
 instance toString CGInst where toString x = gString{|*|} x
@@ -39,11 +39,17 @@ instance toString CGInst where toString x = gString{|*|} x
 :: CGArg
 	= Val 	String	// Static value
 	| Label String	// To the position of the label
-	| Next 	String	// To the position after this label
 	| Global Int	// Variable offset by the start of the heap
+	| Register CGRegister // A register identifier
 
 :: CGInst
 	= Inst String [CGArg] (Maybe String)
+
+:: CGRegister
+	= SP
+	| MP
+	| RR
+	| PC
 
 instance zero CGMonadState
 	where 
@@ -88,6 +94,38 @@ instance zero CGMonadState
 			(1st stack slot is at <program_length> + 16)
 **/
 
+hexChar :: Int -> String
+hexChar 0 = "0"
+hexChar 1 = "1"
+hexChar 2 = "2"
+hexChar 3 = "3"
+hexChar 4 = "4"
+hexChar 5 = "5"
+hexChar 6 = "6"
+hexChar 7 = "7"
+hexChar 8 = "8"
+hexChar 9 = "9"
+hexChar 10 = "a"
+hexChar 11 = "b"
+hexChar 12 = "c"
+hexChar 13 = "d"
+hexChar 14 = "e"
+hexChar 15 = "f"
+
+IntToHex :: Int -> String
+IntToHex num = 
+		toString num
+	/*let
+		nibble1 = hexChar $ 15 bitand (num >> 28)
+		nibble2 = hexChar $ 15 bitand (num >> 24)
+		nibble3 = hexChar $ 15 bitand (num >> 20)
+		nibble4 = hexChar $ 15 bitand (num >> 16)
+		nibble5 = hexChar $ 15 bitand (num >> 12)
+		nibble6 = hexChar $ 15 bitand (num >> 8)
+		nibble7 = hexChar $ 15 bitand (num >> 4)
+		nibble8 = hexChar $ 15 bitand (num)
+	in  "0x" +++ nibble1 +++ nibble2 +++ nibble3 +++ nibble4 +++ nibble5 +++ nibble6 +++ nibble7 +++ nibble8
+*/
 cgAp :: (CGMonad (a -> b)) (CGMonad a) -> CGMonad b
 cgAp (CG cgf) (CG cga) = CG \st.
 	case cgf st of
@@ -114,7 +152,7 @@ uptoCodeGeneration ::
 	([Error] -> a)
 	([Error] -> a)
 	([Error] -> a)
-		-> Either a ([CGInst], [Error])
+		-> Either a (String, [Error])
 uptoCodeGeneration prog fscanErrors fparseErrors fbindingErrors ftypeErrors fcodeErrors  =
 	case uptoTypeInference prog fscanErrors fparseErrors fbindingErrors ftypeErrors of
 		Left a	= Left a
@@ -122,8 +160,29 @@ uptoCodeGeneration prog fscanErrors fparseErrors fbindingErrors ftypeErrors fcod
 			let result = runCodeGenerator ast
 			in case result of
 				Right errors = Left $ fcodeErrors (typeErrors ++ errors)
-				Left instructions = Right (instructions, typeErrors)
+				Left instructions = Right (runCodeLabeler instructions, typeErrors)
 
+runCodeLabeler :: [CGInst] -> String
+runCodeLabeler [] = "NONE";
+runCodeLabeler instrs = foldl (+++)  "" (map labelInst instrs) 
+	where
+		labelInst :: CGInst -> String
+		labelInst (Inst instr args label) =
+			let
+				prefix = case label of
+							(Just l) = l +++ ": "
+							(Nothing) = ""; 
+				processedArgs = foldl (+++) "" (map (resolveArgument) args)
+			
+			in	prefix +++ instr +++ processedArgs +++ "\n"
+		resolveArgument :: CGArg -> String
+		resolveArgument (Val num) = " " +++ IntToHex (toInt num)
+		resolveArgument (Label l) = " " +++ l
+		resolveArgument (Global offset) = " Blah"
+		resolveArgument (Register MP) = " MP"
+		resolveArgument (Register SP) = " SP"
+		resolveArgument (Register RR) = " RR"
+		resolveArgument (Register PC) = " PC" 
 	
 runCodeGenerator :: AST -> Either [CGInst] [Error]
 runCodeGenerator ast = 
@@ -148,7 +207,7 @@ registerLocalVariable name =
 registerInstructions :: [CGInst] -> CGMonad ()
 registerInstructions instructions = CG \st. (
 		Just (), 
-		{st & instructions = instructions ++ st.instructions}
+		{st & instructions = st.instructions ++ instructions}
 	)
 	
 setFunctionArguments :: [String] (CGMonad a) -> CGMonad a
@@ -195,7 +254,7 @@ getArguments = CG \st.
 	
 generateLabel :: CGMonad String
 generateLabel = CG \st.
-	(Just ("label%" +++ (toString st.counter)), {st & counter = st.counter + 1})
+	(Just (st.currentFunction +++ "_l_" +++ (toString st.counter)), {st & counter = st.counter + 1})
 	
 /**
 	Push code that will load the stack location of the variable on the stack.
@@ -237,8 +296,11 @@ resolveAddress id =
 		getGlobalVariable :: Int -> CGMonad ()
 		getGlobalVariable index = 
 			registerInstructions [
-				Inst "ldc" [Global index] Nothing,
-				Inst "lda" [Val "0"] Nothing
+				Inst "ldc" [Label "_globals"] Nothing,
+				Inst "ldc" [Val (toString (index + 17))] Nothing, // 17 = magic value
+				Inst "add" [] Nothing
+				//Inst "ldc" [Global index] Nothing,
+				//Inst "lda" [Val "0"] Nothing
 			]
 
 indexOf :: [a] a -> Maybe Int | Eq a
@@ -251,10 +313,14 @@ where
 	| otherwise = indexOfIter b item (count + 1)
 	
 /**
-	Push code that will load the heap location of the fielded variable on the stack.
+	Push code that will load the address of the fielded variable on the stack.
 **/
 resolveFieldedAddress :: IdWithFields -> CGMonad ()
-resolveFieldedAddress (JustId id metadata) = resolveAddress id
+resolveFieldedAddress (JustId id metadata) = 
+		resolveAddress id
+	/*>>| registerInstructions [
+				Inst "lda" [Val "0"] Nothing
+			]*/
 resolveFieldedAddress (WithField nest field	metadata) = 
 	let
 		// Load the heap valued pointed to - 1 on the stack
@@ -267,14 +333,20 @@ resolveFieldedAddress (WithField nest field	metadata) =
 				Inst "ldc" [Val "1"] Nothing,
 				Inst "sub" [] Nothing
 			]
+		
+		// Get value of current address on stack
+		retrieve = registerInstructions [
+				Inst "lda" [Val "0"] Nothing
+			]
 	
 		resolveField = case field of
 			(FieldHd) 	= return ()
 			(FieldFst) 	= return ()
-			(FieldTl) 	= loadNext
+			(FieldTl) 	= movePointer
 			(FieldSnd) 	= movePointer
 			 
 	in 		resolveFieldedAddress nest
+		>>| retrieve
 		>>|	resolveField
 		
 		
@@ -302,12 +374,12 @@ where
 			
 			// Monad performing all variable initialisations.
 			variableCode = sequence_ (
-					map (\(Var dec=:(VarDecl _ name _ _)). (generateCode dec) >>| registerGlobalVariable name) variables
+					map (\(Var dec=:(VarDecl _ name _ _)). (generateCode dec) >>| registerGlobalVariable name) (reverse variables)
 				)
 			
 			// Monad creating all function code.
 			functionCode = sequence_ (
-					map generateCode functions
+					map (\(Fun dec). (generateCode dec)) (reverse functions)
 				)
 			
 			// Monad to create the starting function call.
@@ -317,11 +389,17 @@ where
 			programEnd = registerInstructions [
 					Inst "halt" [] Nothing
 				]
+				
+			globalPointer = registerInstructions [
+					Inst "halt" [] (Just "_globals")
+				]
 			
-		in	variableCode 	>>|
-			mainCall		>>|
-			programEnd		>>|
-			functionCode
+		in		
+				variableCode 	
+			>>|	mainCall
+			>>|	programEnd
+			>>|	functionCode
+			>>| globalPointer
 		where
 			isVarDecl :: Decl -> Bool
 			isVarDecl (Var _) = True
@@ -388,10 +466,11 @@ where
 		let
 			// Monad performing all variable initialisations.
 			variableMonads = map (
-				\dec=:(VarDecl _ name _ _). 
-						generateCode dec 
+					\dec=:(VarDecl _ name _ _). 
+					generateCode dec 
 					>>| registerLocalVariable name
 				) decls
+				
 			variableCode = sequence_ (
 					variableMonads
 				)
@@ -404,27 +483,26 @@ where
 			// Monad to clean up afterwards
 			cleanUp = registerInstructions [
 					// Move MP to SP, so we point to the return address
-					Inst "ldrr" [Val "SP", Val "MP"] (Just (name +++ "%end")),
+					Inst "ldrr" [Register SP, Register MP] (Just (name +++ "_end")),
 					// Load the address into RR
-					Inst "str" [Val "RR"] Nothing,
+					Inst "str" [Register RR] Nothing,
 					// Load the previous MP into MP, to restore the previous context
-					Inst "str" [Val "MP"] Nothing,
+					Inst "str" [Register MP] Nothing,
 					// Jump back to caller
-					Inst "ldrr" [Val "PC", Val "RR"] Nothing
+					Inst "ldrr" [Register PC, Register RR] Nothing
 				]
 			
 		// Set function arguments so the variables are known	
 		in	setFunctionArguments args (
 					registerInstructions [
-						Inst "nop" [] (Just (name +++ "%entry"))
+						Inst "nop" [] (Just (name +++ "_entry"))
 					]
 				>>| variableCode
-			>>| inFunction name (
-					stmtCode
-				)
-			>>| cleanUp
-		)
-			
+				>>| inFunction name (
+						stmtCode
+					)
+				>>| cleanUp
+			)			
 		where
 			isVarDecl :: Decl -> Bool
 			isVarDecl (Var _) = True
@@ -460,15 +538,16 @@ where
 					generateCode cond
 					// Jump to after the iflabel if the condition is false
 				>>| registerInstructions [
-						Inst "ldc" [Val "1"] Nothing,
-						Inst "eq" [] Nothing,
-						Inst "brf" [Next ifLabel] Nothing
+						// We can ignore these, as the brf will jump only on zero
+						//Inst "ldc" [Val "1"] Nothing,
+						//Inst "eq" [] Nothing,
+						Inst "brf" [Label ifLabel] Nothing
 					]
 				>>| generateCodes stmts_a
 					// After the if, jump to the end
 					// Use a nop to indicate the start of the 
 				>>| registerInstructions [
-						Inst "bra" [Next elseLabel] Nothing,
+						Inst "bra" [Label elseLabel] Nothing,
 						Inst "nop" [] (Just ifLabel)
 					]
 				>>| elseCode
@@ -494,9 +573,9 @@ where
 				>>|	generateCode cond
 					// Jump to the endlabel if the condition is false
 				>>| registerInstructions [
-						Inst "ldc" [Val "1"] Nothing,
-						Inst "eq" [] Nothing,
-						Inst "brf" [Next endLabel] Nothing
+						//Inst "ldc" [Val "1"] Nothing,
+						//Inst "eq" [] Nothing,
+						Inst "brf" [Label endLabel] Nothing
 					]
 				>>| generateCodes stmts
 				>>| registerInstructions [
@@ -572,7 +651,7 @@ where
 			>>= \function. generateCode expr
 			>>| registerInstructions [
 					Inst "stl" [Val (toString (-2 - arguments))] Nothing,
-					Inst "bra" [Label (function +++ "%end")] Nothing
+					Inst "bra" [Label (function +++ "_end")] Nothing
 				]
 				
 				
@@ -583,7 +662,7 @@ where
 	generateCode (StmtRetV metadata) = 
 				getFunction
 			>>= \function. registerInstructions [
-					Inst "bra" [Label (function +++ "%end")] Nothing
+					Inst "bra" [Label (function +++ "_end")] Nothing
 				]
 
 instance generateCode [Expr]
@@ -669,7 +748,7 @@ where
 		**/
 	generateCode (ExpBool bool metadata) =
 		let
-			value = if bool 1 0
+			value = if bool (4294967295) 0
 		in	registerInstructions [
 				Inst "ldc" [Val (toString value)] Nothing
 			]
@@ -719,17 +798,26 @@ where generateCode (FunCall id exprs metadata) =
 		**/
 				generateLabel 		
 			>>= \returnLabel. 	registerInstructions [
-					Inst "ldc" [Val "0"] Nothing
+					Inst "ldc" [Val "0"] Nothing // Return value
 				]
+				// Push arguments
 			>>|	generateCode exprs
 			>>| registerInstructions [
-					Inst "ldr" [Val "MP"] Nothing,
-					Inst "ldc" [Label returnLabel] Nothing,
-					Inst "bra" [Label (id +++ "%entry")] Nothing,
-					Inst "ldr" [Val "SP"] (Just returnLabel),
+					// Push old MP to stack
+					Inst "ldr" [Register MP] Nothing,
+					// Set MP, take SP and add 1 (so it points to the return address)
+					Inst "ldr" [Register SP] Nothing,
+					Inst "ldc" [Val "1"] Nothing,
+					Inst "add" [] Nothing,
+					Inst "str" [Register MP] Nothing ,
+					// Branch to subroutine, pushes PC+1 to stack, and jumps
+					Inst "bsr" [Label (id +++ "_entry")] Nothing,
+					// Clean arguments from stack
+					Inst "ajs" [Val (toString (~(length exprs)))] Nothing
+					/*Inst "ldr" [Register SP] Nothing,
 					Inst "ldc" [Val (toString (length exprs))] Nothing,
 					Inst "sub" [] Nothing,
-					Inst "str" [Val "SP"] Nothing 
+					Inst "str" [Register SP] Nothing */
 				]
 		
 		
@@ -757,7 +845,7 @@ where generateCodeBin operator aType bType =
 		case operator of
 			(OpConcat) 	= registerInstructions [
 							Inst "swp" [] Nothing,
-							Inst "stmh" [Val "3"] Nothing
+							Inst "stmh" [Val "2"] Nothing
 						]
 			(OpEquals) 	= generateEquivalence aType
 			(OpNE)		= generateEquivalence aType
@@ -878,10 +966,10 @@ where generateCodeBin operator aType bType =
 					registerInstructions [
 						Inst "and" [] Nothing,
 						Inst "sts" [Val "-2"] Nothing,
-						Inst "ldrr" [Val "SP"] Nothing,
+						Inst "ldrr" [Register SP] Nothing,
 						Inst "ldc" [Val "2"] Nothing,
 						Inst "sub" [] Nothing,
-						Inst "str" [Val "SP"] Nothing
+						Inst "str" [Register SP] Nothing
 					]
 		
 instance generateCodeUn UnOp

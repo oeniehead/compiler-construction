@@ -38,7 +38,7 @@ main =
 		Right (instructions, log) =
 			print instructions
 where
-	compile :: String -> Either String ([CGInst], [Error])
+	compile :: String -> Either String (String, [Error])
 	compile prog = uptoCodeGeneration
 				prog
 				(const Nothing)

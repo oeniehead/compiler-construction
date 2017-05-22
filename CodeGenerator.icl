@@ -94,38 +94,6 @@ instance zero CGMonadState
 			(1st stack slot is at <program_length> + 16)
 **/
 
-hexChar :: Int -> String
-hexChar 0 = "0"
-hexChar 1 = "1"
-hexChar 2 = "2"
-hexChar 3 = "3"
-hexChar 4 = "4"
-hexChar 5 = "5"
-hexChar 6 = "6"
-hexChar 7 = "7"
-hexChar 8 = "8"
-hexChar 9 = "9"
-hexChar 10 = "a"
-hexChar 11 = "b"
-hexChar 12 = "c"
-hexChar 13 = "d"
-hexChar 14 = "e"
-hexChar 15 = "f"
-
-IntToHex :: Int -> String
-IntToHex num = 
-		toString num
-	/*let
-		nibble1 = hexChar $ 15 bitand (num >> 28)
-		nibble2 = hexChar $ 15 bitand (num >> 24)
-		nibble3 = hexChar $ 15 bitand (num >> 20)
-		nibble4 = hexChar $ 15 bitand (num >> 16)
-		nibble5 = hexChar $ 15 bitand (num >> 12)
-		nibble6 = hexChar $ 15 bitand (num >> 8)
-		nibble7 = hexChar $ 15 bitand (num >> 4)
-		nibble8 = hexChar $ 15 bitand (num)
-	in  "0x" +++ nibble1 +++ nibble2 +++ nibble3 +++ nibble4 +++ nibble5 +++ nibble6 +++ nibble7 +++ nibble8
-*/
 cgAp :: (CGMonad (a -> b)) (CGMonad a) -> CGMonad b
 cgAp (CG cgf) (CG cga) = CG \st.
 	case cgf st of
@@ -144,6 +112,10 @@ instance Applicative CGMonad where
 	(<*>) cgf cga = cgAp cgf cga
 instance Functor CGMonad where
 	fmap f cga = cgAp (return f) cga
+	
+cgOptional :: Bool (CGMonad ()) -> (CGMonad ())
+cgOptional True a = a
+cgOptional False _ = return ()
 	
 uptoCodeGeneration ::
 	String
@@ -176,7 +148,7 @@ runCodeLabeler instrs = foldl (+++)  "" (map labelInst instrs)
 			
 			in	prefix +++ instr +++ processedArgs +++ "\n"
 		resolveArgument :: CGArg -> String
-		resolveArgument (Val num) = " " +++ IntToHex (toInt num)
+		resolveArgument (Val num) = " " +++ toString num
 		resolveArgument (Label l) = " " +++ l
 		resolveArgument (Global offset) = " Blah"
 		resolveArgument (Register MP) = " MP"
@@ -194,7 +166,7 @@ runCodeGenerator ast =
 			(Just res)	= Left state.instructions
 	
 error :: Error -> CGMonad ()
-error e = CG \st. (Just (), { st & errors = [e : st.errors]})
+error e = CG \st. (Nothing, { st & errors = [e : st.errors]})
 
 registerGlobalVariable :: String -> CGMonad ()
 registerGlobalVariable name = 
@@ -255,7 +227,34 @@ getArguments = CG \st.
 generateLabel :: CGMonad String
 generateLabel = CG \st.
 	(Just (st.currentFunction +++ "_l_" +++ (toString st.counter)), {st & counter = st.counter + 1})
-	
+
+validateKnownType :: Type -> CGMonad ()
+validateKnownType (BasicType _) = return ()
+validateKnownType (TupleType t1 t2) = validateKnownType t1 >>| validateKnownType t2
+validateKnownType (ArrayType t) = validateKnownType t
+validateKnownType (VoidType) = return ()
+validateKnownType (IdentType _) = error {
+							pos = zero,
+							severity = FATAL,
+							stage = CodeGeneration,
+							message = "Cannot apply operation on unknown type"
+						}
+
+validateKnownTypeShallow :: Type -> CGMonad ()
+validateKnownTypeShallow (BasicType _) = return ()
+validateKnownTypeShallow (TupleType t1 t2) = return ()
+validateKnownTypeShallow (ArrayType t) = return ()
+validateKnownTypeShallow (VoidType) = return ()
+validateKnownTypeShallow (IdentType _) = error {
+							pos = zero,
+							severity = FATAL,
+							stage = CodeGeneration,
+							message = "Cannot apply operation on unknown type"
+						}
+						
+getType :: Expr -> (CGMonad Type)
+getType expr = return (fromJust (getMeta expr).type)
+
 /**
 	Push code that will load the stack location of the variable on the stack.
 	Look for the variable in order:
@@ -276,7 +275,7 @@ resolveAddress id =
 				Note: due to clean list mechanics, the indexes are reversed.
 					The first element will have the largest index.
 			**/
-			(Just index) = getStackVariable (numLocalVars - index + 1)
+			(Just index) = getStackVariable (numLocalVars - index)
 			(Nothing) = case indexOf arguments id of
 				(Just index) = getStackVariable (0 - index - 2)
 				(Nothing) = case indexOf globalVariables id of
@@ -291,7 +290,7 @@ resolveAddress id =
 		getStackVariable :: Int -> CGMonad ()
 		getStackVariable index = 
 			registerInstructions [
-				Inst "ldl" [Val (toString index)] Nothing
+				Inst "ldla" [Val (toString index)] Nothing
 			]
 		getGlobalVariable :: Int -> CGMonad ()
 		getGlobalVariable index = 
@@ -348,7 +347,59 @@ resolveFieldedAddress (WithField nest field	metadata) =
 	in 		resolveFieldedAddress nest
 		>>| retrieve
 		>>|	resolveField
-		
+
+generatePrint :: Type -> (CGMonad ())
+generatePrint (BasicType bType) = 
+		case bType of
+			(CharType) = registerInstructions [Inst "trap" [Val "1"] Nothing]	
+			(_) = registerInstructions [Inst "trap" [Val "0"] Nothing]
+generatePrint (TupleType aType bType) =
+			registerInstructions [
+				Inst "lds" [Val "0"] Nothing,
+				Inst "lda" [Val "0"] Nothing
+			]
+		>>|	generatePrint aType
+		>>| registerInstructions [
+				Inst "lds" [Val "0"] Nothing,
+				Inst "lda" [Val "-1"] Nothing
+			]
+		>>|	generatePrint bType
+		>>| registerInstructions [
+				Inst "ajs" [Val "-1"] Nothing
+			]
+generatePrint (ArrayType type) =
+			generateLabel >>= \startLabel.
+			generateLabel >>= \endLabel.
+			registerInstructions [
+				Inst "lds" [Val "0"] (Just startLabel),
+				Inst "lda" [Val "-1"] Nothing,
+				Inst "brf" [Label endLabel] Nothing,
+				Inst "lds" [Val "0"] Nothing,
+				Inst "lda" [Val "0"] Nothing
+			]
+		>>|	generatePrint type
+		>>| registerInstructions [
+				Inst "lda" [Val "-1"] Nothing,
+				Inst "bra" [Label startLabel] Nothing,
+				Inst "ajs" [Val "-1"] (Just endLabel)
+			]
+
+generateRead :: Type -> (CGMonad ())
+generateRead (BasicType IntType) = registerInstructions [
+					Inst "trap" [Val "10"] Nothing
+				]
+generateRead (BasicType BoolType) = registerInstructions [
+					Inst "trap" [Val "10"] Nothing
+				]
+generateRead (BasicType CharType) = registerInstructions [
+					Inst "trap" [Val "11"] Nothing
+				]
+generateRead _ = error {
+							pos = zero,
+							severity = FATAL,
+							stage = CodeGeneration,
+							message = "Cannot read non-basic types"
+						}
 		
 /**
 	Code generator implementation
@@ -374,7 +425,7 @@ where
 			
 			// Monad performing all variable initialisations.
 			variableCode = sequence_ (
-					map (\(Var dec=:(VarDecl _ name _ _)). (generateCode dec) >>| registerGlobalVariable name) (reverse variables)
+					map (\(Var dec=:(VarDecl _ name _ _)). generateCode dec >>| registerGlobalVariable name) (variables)
 				)
 			
 			// Monad creating all function code.
@@ -636,8 +687,10 @@ where
 			Just pass through here.
 		**/
 	generateCode (StmtFunCall funCall metadata) = 
-			generateCode funCall
-			
+				generateCode funCall
+			>>| registerInstructions [
+				Inst "ajs" [Val "-1"] Nothing
+			]
 			
 		/**
 			1. Generate code for expression.
@@ -797,30 +850,46 @@ where generateCode (FunCall id exprs metadata) =
 			6. Jump to function.
 		**/
 				generateLabel 		
-			>>= \returnLabel. 	registerInstructions [
-					Inst "ldc" [Val "0"] Nothing // Return value
-				]
-				// Push arguments
-			>>|	generateCode exprs
-			>>| registerInstructions [
-					// Push old MP to stack
-					Inst "ldr" [Register MP] Nothing,
-					// Set MP, take SP and add 1 (so it points to the return address)
-					Inst "ldr" [Register SP] Nothing,
-					Inst "ldc" [Val "1"] Nothing,
-					Inst "add" [] Nothing,
-					Inst "str" [Register MP] Nothing ,
-					// Branch to subroutine, pushes PC+1 to stack, and jumps
-					Inst "bsr" [Label (id +++ "_entry")] Nothing,
-					// Clean arguments from stack
-					Inst "ajs" [Val (toString (~(length exprs)))] Nothing
-					/*Inst "ldr" [Register SP] Nothing,
-					Inst "ldc" [Val (toString (length exprs))] Nothing,
-					Inst "sub" [] Nothing,
-					Inst "str" [Register SP] Nothing */
-				]
-		
-		
+				>>= \returnLabel. 	registerInstructions [
+						Inst "ldc" [Val "0"] Nothing // Return value
+					]
+					// Push arguments
+				>>|	generateCode exprs
+				>>| cgOptional (id == "isEmpty") (
+						registerInstructions [
+							Inst "lda" [Val "0"] Nothing,
+							Inst "ldc" [Val "0"] Nothing,
+							Inst "eq" [] Nothing,
+							Inst "sta" [Val "-1"] Nothing
+						]
+					) 
+				>>| cgOptional (id == "read") (
+						generateRead (fromJust metadata.type)
+					) 
+				>>| cgOptional (id == "print") (
+						return () >>= \_.
+							let
+								head = hd exprs
+							in 	getType head 
+							>>= \type.generatePrint (type)
+					) 
+				>>| cgOptional (id <> "isEmpty" && id <> "read" && id <> "print") (
+						registerInstructions [
+							// Push old MP to stack
+							Inst "ldr" [Register MP] Nothing,
+							// Set MP, take SP and add 1 (so it points to the return address)
+							Inst "ldr" [Register SP] Nothing,
+							Inst "ldc" [Val "1"] Nothing,
+							Inst "add" [] Nothing,
+							Inst "str" [Register MP] Nothing ,
+							// Branch to subroutine, pushes PC+1 to stack, and jumps
+							Inst "bsr" [Label (id +++ "_entry")] Nothing,
+							// Clean arguments from stack
+							Inst "ajs" [Val (toString (~(length exprs)))] Nothing
+						]
+				)
+
+
 instance generateCodeBin BinOp
 where generateCodeBin operator aType bType =
 		/**
@@ -843,11 +912,14 @@ where generateCodeBin operator aType bType =
 			3. Generate code for operator.
 		**/
 		case operator of
-			(OpConcat) 	= registerInstructions [
+			(OpConcat) 	= validateKnownTypeShallow bType
+					  >>| registerInstructions [
 							Inst "swp" [] Nothing,
 							Inst "stmh" [Val "2"] Nothing
 						]
-			(OpEquals) 	= generateEquivalence aType
+			(OpEquals) 	= validateKnownType aType
+					  >>| validateKnownType bType
+					  >>| generateEquivalence aType
 			(OpNE)		= generateEquivalence aType
 					  >>| generateCodeUn OpNot aType
 			(genOp)		= // All generic operators that just use a different opcode.
@@ -874,72 +946,93 @@ where generateCodeBin operator aType bType =
 					Inst "eq" [] Nothing
 				]
 			generateEquivalence type=:(ArrayType nType) =
-					// Load values 
-					registerInstructions [
-						// Load value of LHS on stack
-						Inst "lds" [Val "-1"] Nothing,
-						Inst "ldh" [Val "0"] Nothing,
-						// Load value of RHS on stack
-						Inst "lds" [Val "-1"] Nothing,
-						Inst "ldh" [Val "0"] Nothing
-					]
-				>>| generateEquivalence nType
-				>>| generateLabel >>= \endLabel.
-					generateLabel >>= \emptyLabel.
+					generateLabel >>= \endLabel.
+					generateLabel >>= \nonEquivLabel.
 					generateLabel >>= \nonEmptyLabel.
-					// Load references 
+					generateLabel >>= \startLabel.
 					registerInstructions [
-						// Load reference of LHS on stack
-						Inst "lds" [Val "-2"] Nothing,
+						// Load result value on stack
+						Inst "ldc" [Val "-1"] Nothing,
+						
+						// This is equivalent to a.isEmpty == b.isEmpty
+				
+						// Load reference of LHS on stack, and check if this is the empty list
+						Inst "lds" [Val "-2"] (Just startLabel),
 						Inst "ldh" [Val "-1"] Nothing,
+						Inst "ldc" [Val "0"] Nothing,
+						Inst "eq" [] Nothing,
+						
 						// Load reference of RHS on stack
 						Inst "lds" [Val "-2"] Nothing,
 						Inst "ldh" [Val "-1"] Nothing,
-						
-						// Check if LHS is empty
-						Inst "lds" [Val "-1"] Nothing,
-						Inst "lhc" [Val "0"] Nothing,
-						Inst "eq" [Val "0"] Nothing,
-						
-						// Check if RHS is empty
-						Inst "lds" [Val "-1"] Nothing,
-						Inst "lhc" [Val "0"] Nothing,
+						Inst "ldc" [Val "0"] Nothing,
 						Inst "eq" [] Nothing,
 						
-						// Check if both are empty or not
-						// By adding, 0 = both full, 2 = both empty
-						Inst "add" [] Nothing,
-						
-						// If both are nonempty, move to generated equivalence
-						Inst "lds" [Val "0"] Nothing,
-						Inst "lhc" [Val "0"] Nothing,
 						Inst "eq" [] Nothing,
+						
+						// Jump to end and set result to 0 on mismatch
 						Inst "brt" [Label nonEmptyLabel] Nothing,
-						
-						// If both are empty, push 1 and return
-						Inst "lds" [Val "0"] Nothing,
-						Inst "lhc" [Val "2"] Nothing,
-						Inst "eq" [] Nothing,
-						Inst "brt" [Label emptyLabel] Nothing,
-						
-						// There is a mismatch, push 0 and return
-						Inst "ajs" [Val "-2"] Nothing,
-						Inst "lhc" [Val "0"] Nothing,
-						Inst "bra" [Label endLabel] Nothing,
-						
-						Inst "ajs" [Val "-2"] (Just emptyLabel),
-						Inst "lhc" [Val "1"] Nothing,
-						Inst "bra" [Label endLabel] Nothing,
-						
-						Inst "nop" [] (Just nonEmptyLabel),
-						Inst "ajs" [Val "-1"] Nothing
+						Inst "ldc" [Val "0"] Nothing,
+						Inst "and" [] Nothing,
+						Inst "bra" [Label endLabel] Nothing
 					]
-				>>| generateEquivalence type
-				>>| // Move result to top
-					registerInstructions [
-						Inst "and" [] (Just endLabel),
+				>>|	registerInstructions [
+						// Test if both of the lists are the empty list
+					
+						// Test if LHS is the empty list
+						Inst "lds" [Val "-2"] (Just nonEmptyLabel),
+						Inst "ldh" [Val "-1"] Nothing,
+						Inst "ldc" [Val "0"] Nothing,
+						Inst "eq" [] Nothing,
+						// Test if RHS is the empty list
+						Inst "lds" [Val "-2"] Nothing,
+						Inst "ldh" [Val "-1"] Nothing,
+						Inst "ldc" [Val "0"] Nothing,
+						Inst "eq" [] Nothing,
+						
+						// Test if both lists are empty
+						Inst "and" [] Nothing,
+						Inst "brt" [Label endLabel] Nothing,
+				
+						// Here we can assume that both lists have an item
+						// Because we checked that a.isEmpty == b.isEmpty
+						// And they are not both empty
+				
+						// Perform value equivalence check
+				
+						// Load value of LHS on stack
+						Inst "lds" [Val "-2"] (Just startLabel),
+						Inst "ldh" [Val "0"] Nothing,
+						// Load value of RHS on stack
+						Inst "lds" [Val "-2"] Nothing,
+						Inst "ldh" [Val "0"] Nothing
+					]
+				>>| generateEquivalence nType
+				>>|	registerInstructions [
+						// Store result in stack
+						Inst "and" [] Nothing
+					]
+				>>|	registerInstructions [
+						// Test if one of the current lists are the empty list
+						// If so, return nonequal
+						// If not, update references and restart loop
+						
+						// Load reference of LHS on stack, and check if this is the empty list
+						Inst "lds" [Val "-2"] Nothing,
+						Inst "ldh" [Val "-1"] Nothing,
+						Inst "sts" [Val "-3"] Nothing,
+						
+						// Load reference of RHS on stack
+						Inst "lds" [Val "-1"] Nothing,
+						Inst "ldh" [Val "-1"] Nothing,
 						Inst "sts" [Val "-2"] Nothing,
-						Inst "ajs" [Val "-2"] Nothing
+						
+						// Jump to top of loop
+						Inst "bra" [Label startLabel] Nothing,
+						
+						// We reached the end
+						Inst "sts" [Val "-2"] (Just endLabel),
+						Inst "ajs" [Val "-1"] Nothing
 					]
 			generateEquivalence (TupleType aType bType) =
 					// Compare left side
@@ -966,9 +1059,7 @@ where generateCodeBin operator aType bType =
 					registerInstructions [
 						Inst "and" [] Nothing,
 						Inst "sts" [Val "-2"] Nothing,
-						Inst "ldrr" [Register SP] Nothing,
-						Inst "ldc" [Val "2"] Nothing,
-						Inst "sub" [] Nothing,
+						Inst "ajs" [Val "-1"] Nothing,
 						Inst "str" [Register SP] Nothing
 					]
 		

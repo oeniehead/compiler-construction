@@ -1,14 +1,24 @@
-var a = [];
-var b = 'h' : 'a' : 'l' : 'l' : 'o' : a;
+var a = 'a' : 'b' : 'c' : [];
+var b = 'a' : 'b' : 'b' : [];
+var c = a : a : a : [];
+var d = a : a : a : [];
+
+/*var a = 1;
+var b = 1;
+var c = 2;
+var d = 2;*/
+
+var e = (1, a);
+var f = (d, b);
+
+Int x = 0;
 
 main ()
 {
-	var d = 1;
-	var c = b.tl;
-	
-	c.tl = d;
+	x = read();
 
-	return a;
+	e.fst = x;
+	print(e);
 }
 
 

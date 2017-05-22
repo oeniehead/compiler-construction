@@ -29,7 +29,8 @@ instance == OrderItem where
 buildInFunctions :: [String]
 buildInFunctions = [
 		"isEmpty",
-		"print"
+		"print",
+		"read"
 	]
 
 :: ReturnBehaviour
@@ -358,14 +359,18 @@ itemExists inp=:(CallsItem name use_args use_return _) [(FuncSig signame fun_arg
 | otherwise = True
 itemExists inp [_: b] = itemExists inp b
 
+isVar :: OrderItem -> Bool
+isVar (VarItem _ _) = True
+isVar _	= False
+
 doCycleAnalysis :: OrderGraph -> [Error]
 doCycleAnalysis ([], signatures, errors) = []
-doCycleAnalysis (items, _, _) = flatten [findCycle a a items \\ (a, _) <- items]
+doCycleAnalysis (items, _, _) = flatten [findCycle a items \\ (a, _) <- items | isVar a]
 
-findCycle :: OrderItem OrderItem [(OrderItem, OrderItem)] -> [Error]
-findCycle current to graph = 
+findCycle :: OrderItem [(OrderItem, OrderItem)] -> [Error]
+findCycle current graph = 
 	let tails 	= flatten [findTail current graph depth \\ depth <- [1 .. (length graph)]]
-		cycles 	= filter ((==) to) tails
+		cycles 	= filter ((==) current) tails
 	in	map (\cycle. 
 		let (name, pos) = case cycle of
 					(VarItem n p) 	= ("variable " +++ n, p)

@@ -74,9 +74,18 @@ instance ^^ TypeScheme where
 
 // Hiding the actual environment type:
 
+// TODO: clean this up
+injectUtilities :: Map Id TypeScheme
+injectUtilities = let
+			map = 'm'.newMap
+			map2 = 'm'.put ("print") (TS (fromList ["a"]) (FuncType [IdentType "a"] VoidType)) map
+			map3 = 'm'.put ("read") (TS (fromList ["a"]) (FuncType [] (IdentType "a"))) map2
+			map4 = 'm'.put ("isEmpty") (TS (fromList ["a"]) (FuncType [ArrayType (IdentType "a")] (BasicType BoolType))) map3
+		in map4
+
 newEnv :: Env
 newEnv = { varTypes  = 'm'.newMap
-		 , funcTypes = 'm'.newMap
+		 , funcTypes = injectUtilities//'m'.newMap
 		 }
 
 setVarType :: Env Id Type -> Env

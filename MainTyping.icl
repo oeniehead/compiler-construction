@@ -42,6 +42,7 @@ where
 				prog
 				(const Nothing)
 				(\pErrors -> errorsToString pErrors)
+				(\bErrors -> errorsToString bErrors)
 				(\tErrors -> errorsToString tErrors)
 
 

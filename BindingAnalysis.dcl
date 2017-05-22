@@ -28,4 +28,11 @@ class buildGraphFrom a :: OrderItem [String] a -> OrderGraph
 
 :: OrderGraph :== ([(OrderItem, OrderItem)], [Signature], [Error])
 
-doBindingAnalysis :: AST -> Either AST [Error]
+doBindingAnalysis :: AST -> Either [Error] AST
+
+uptoBinding ::
+	String
+	([Error] -> Maybe a)
+	([Error] -> a)
+	([Error] -> a)
+		-> Either a (AST, [Error])

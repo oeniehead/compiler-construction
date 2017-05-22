@@ -6,6 +6,7 @@ import Misc
 import Error
 import Spec
 import PrettyPrinter
+import BindingAnalysis
 
 from StdList import and, all, zip, ++, hd, isMember, zip2
 from Data.Func import $
@@ -73,9 +74,18 @@ instance ^^ TypeScheme where
 
 // Hiding the actual environment type:
 
+// TODO: clean this up
+injectUtilities :: Map Id TypeScheme
+injectUtilities = let
+			map = 'm'.newMap
+			map2 = 'm'.put ("print") (TS (fromList ["a"]) (FuncType [IdentType "a"] VoidType)) map
+			map3 = 'm'.put ("read") (TS (fromList ["a"]) (FuncType [] (IdentType "a"))) map2
+			map4 = 'm'.put ("isEmpty") (TS (fromList ["a"]) (FuncType [ArrayType (IdentType "a")] (BasicType BoolType))) map3
+		in map4
+
 newEnv :: Env
 newEnv = { varTypes  = 'm'.newMap
-		 , funcTypes = 'm'.newMap
+		 , funcTypes = injectUtilities//'m'.newMap
 		 }
 
 setVarType :: Env Id Type -> Env
@@ -449,15 +459,16 @@ uptoTypeInference ::
 	([Error] -> Maybe a)
 	([Error] -> a)
 	([Error] -> a)
+	([Error] -> a)
 		-> Either a (AST, [Error])
-uptoTypeInference prog fscanErrors fparseErrors ftypeErrors =
-	case uptoParse prog fscanErrors fparseErrors of
+uptoTypeInference prog fscanErrors fparseErrors fbindingErrors ftypeErrors =
+	case uptoBinding prog fscanErrors fparseErrors fbindingErrors of
 		Left a	= Left a
-		Right (ast, scanErrors) =
+		Right (ast, bindingErrors) =
 			let (mAST, typeErrors) = typeInference ast
 			in case mAST of
-				Nothing  = Left $ fparseErrors (scanErrors ++ typeErrors)
-				Just ast = Right (ast, scanErrors ++ typeErrors)
+				Nothing  = Left $ fparseErrors (bindingErrors ++ typeErrors)
+				Just ast = Right (ast, bindingErrors ++ typeErrors)
 
 instance matchN AST where
 	matchN ast = matchAllN ast

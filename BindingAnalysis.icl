@@ -6,6 +6,7 @@ import StdGeneric
 import GenString
 import Error
 import StdList
+from Data.Func import $
 
 import StdDebug
 
@@ -28,7 +29,8 @@ instance == OrderItem where
 buildInFunctions :: [String]
 buildInFunctions = [
 		"isEmpty",
-		"print"
+		"print",
+		"read"
 	]
 
 :: ReturnBehaviour
@@ -38,6 +40,22 @@ buildInFunctions = [
 	
 :: ReturnResult :== (Either ReturnBehaviour Error)
 
+uptoBinding ::
+	String
+	([Error] -> Maybe a)
+	([Error] -> a)
+	([Error] -> a)
+		-> Either a (AST, [Error])
+uptoBinding prog fscanErrors fparseErrors fbindingErrors =
+	case uptoParse prog fscanErrors fparseErrors of
+		Left a	= Left a
+		Right (ast, parseErrors) =
+			let result = doBindingAnalysis ast
+			in case result of
+				Left errors = Left $ fbindingErrors (parseErrors ++ errors)
+				Right ast = Right (ast, parseErrors)
+
+
 doAnalysis :: OrderGraph AST -> OrderGraph
 doAnalysis _ [] = ([], [], [])
 doAnalysis graph [declaration : declarations] = 
@@ -46,19 +64,11 @@ doAnalysis graph [declaration : declarations] =
 	in	combineGraphs items (doAnalysis items declarations)
 	
 buildGraph :: OrderGraph Decl -> OrderGraph
-buildGraph g (Var v _) = doOrder g v
-buildGraph g (Fun f _) = doOrder g f
+buildGraph g (Var v) = doOrder g v
+buildGraph g (Fun f) = doOrder g f
 
 combineGraphs :: OrderGraph OrderGraph -> OrderGraph
 combineGraphs (a, b, c) (i, j, k) = (a ++ i, b ++ j, c ++ k)
-
-test :: AST
-test = [
-		(Fun (FunDecl "c" [] Nothing [] [(StmtRet (ExpInt 1 {pos={line=2 ,col=8} ,type=Nothing}) {pos={line=2 ,col=1} ,type=Nothing})] {pos={line=0 ,col=0} ,type=Nothing}) {pos={line=0 ,col=0} ,type=Nothing}),
-		(Fun (FunDecl "c" [] Nothing [] [(StmtRet (ExpInt 1 {pos={line=7 ,col=8} ,type=Nothing}) {pos={line=7 ,col=1} ,type=Nothing})] {pos={line=5 ,col=0} ,type=Nothing}) {pos={line=5 ,col=0} ,type=Nothing})
-	]
-	
-Start = doAnalysis ([], [], []) test
 	
 /*
 Build graph from VarDecl:
@@ -90,7 +100,7 @@ Build graph from FunDecl:
 	- A cycle in functions means recursion, for now we do not allow that
 */
 instance doOrder FunDecl where
-	doOrder graph (FunDecl name arguments type variables statements {MetaData| pos = pos, type = _}) = 
+	doOrder graph (FunDecl name arguments type variables statements {MetaDataTS| pos = pos, typeScheme = _}) = 
 		let 
 			me = FuncItem name pos
 			returns = returnsValue pos statements
@@ -349,14 +359,18 @@ itemExists inp=:(CallsItem name use_args use_return _) [(FuncSig signame fun_arg
 | otherwise = True
 itemExists inp [_: b] = itemExists inp b
 
+isVar :: OrderItem -> Bool
+isVar (VarItem _ _) = True
+isVar _	= False
+
 doCycleAnalysis :: OrderGraph -> [Error]
 doCycleAnalysis ([], signatures, errors) = []
-doCycleAnalysis (items, _, _) = flatten [findCycle a a items \\ (a, _) <- items]
+doCycleAnalysis (items, _, _) = flatten [findCycle a items \\ (a, _) <- items | isVar a]
 
-findCycle :: OrderItem OrderItem [(OrderItem, OrderItem)] -> [Error]
-findCycle current to graph = 
+findCycle :: OrderItem [(OrderItem, OrderItem)] -> [Error]
+findCycle current graph = 
 	let tails 	= flatten [findTail current graph depth \\ depth <- [1 .. (length graph)]]
-		cycles 	= filter ((==) to) tails
+		cycles 	= filter ((==) current) tails
 	in	map (\cycle. 
 		let (name, pos) = case cycle of
 					(VarItem n p) 	= ("variable " +++ n, p)
@@ -413,20 +427,20 @@ getOrderedAST ast 	[a : b] =
 	in	[item : getOrderedAST rest b]
 	
 getASTPosition :: AST OrderItem -> Int
-getASTPosition [(Var (VarDecl _ name _ _) _) : b] item=:(VarItem name2 _) = if (name == name2) (0) (1 + (getASTPosition b item))
-getASTPosition [(Fun (FunDecl name _ _ _ _ _) _) : b] item=:(FuncItem name2 _) = if (name == name2) (0) (1 + (getASTPosition b item))
-getASTPosition [(Fun (FunDecl name _ _ _ _ _) _) : b] item=:(CallsItem name2 _ _ _) = if (name == name2) (0) (1 + (getASTPosition b item))
+getASTPosition [(Var (VarDecl _ name _ _)) : b] item=:(VarItem name2 _) = if (name == name2) (0) (1 + (getASTPosition b item))
+getASTPosition [(Fun (FunDecl name _ _ _ _ _)) : b] item=:(FuncItem name2 _) = if (name == name2) (0) (1 + (getASTPosition b item))
+getASTPosition [(Fun (FunDecl name _ _ _ _ _)) : b] item=:(CallsItem name2 _ _ _) = if (name == name2) (0) (1 + (getASTPosition b item))
 getASTPosition [_ : b] item = 1 + (getASTPosition b item)
 
-doBindingAnalysis :: AST -> Either AST [Error]
+doBindingAnalysis :: AST -> Either [Error] AST
 doBindingAnalysis ast =
 	case (doAnalysis ([], [], []) ast) of
 		graph=:(relations, signatures, []) = case doUnusedAnalysis graph of
 			[] = case doCycleAnalysis graph of
-				[] 	= (Left (doOrderDeclarations graph ast))
-				errors = (Right errors)
-			errors = (Right errors)
-		(_, _, errors) = (Right errors)
+				[] 	= (Right (doOrderDeclarations graph ast))
+				errors = (Left errors)
+			errors = (Left errors)
+		(_, _, errors) = (Left errors)
 
 
 

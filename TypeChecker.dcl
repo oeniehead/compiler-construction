@@ -20,6 +20,7 @@ uptoTypeInference ::
 	([Error] -> Maybe a)
 	([Error] -> a)
 	([Error] -> a)
+	([Error] -> a)
 		-> Either a (AST, [Error])
 
 

@@ -59,18 +59,14 @@ instance ^^ Type where
 		VoidType		= VoidType
 
 instance ^^ TypeScheme where
-	(^^) (TS boundedVars type) subst = TS boundedVars type` where
-		type` = case type of
+	(^^) (TS boundedVars type) subst = TS boundedVars (transform type) where
+		transform type = case type of
 			IdentType id	= if (member id boundedVars) (IdentType id) (subst id) // Don't substitute the bounded type variables
 			BasicType b		= BasicType b
-			TupleType t1 t2	= TupleType (t1 ^^ subst) (t2 ^^ subst)
-			ArrayType t		= ArrayType (t ^^ subst)
-			FuncType args r = FuncType (map (\arg.arg ^^ subst) args) (r ^^ subst)
+			TupleType t1 t2	= TupleType (transform t1) (transform t2)
+			ArrayType t		= ArrayType (transform t)
+			FuncType args r = FuncType (map transform args) (transform r)
 			VoidType		= VoidType
-
-//instance ^^ Type where
-//	(^^) type subst = type`
-//		where TS _ type` = (TS [] type) ^^ subst
 
 // Hiding the actual environment type:
 
@@ -328,7 +324,9 @@ getLabel :: MMonad String
 getLabel = M \st.(Just st.label,st)	
 
 mRun :: (MMonad a) -> (Maybe a, [Error])
-mRun (M ma) = let (maybeA, st) = ma {counter = 0, errors = [], label = "", env = newEnv, subst = idSubst} in (maybeA, st.errors)
+mRun (M ma) =
+	let (maybeA, st) = ma {counter = 0, errors = [], label = "", env = newEnv, subst = idSubst}
+	in (maybeA, st.errors)
 
 //derived combinators
 mUnify :: Type Type -> MMonad Subst // calculate the unification, immediately apply it to the environment and the substitution function.
@@ -471,7 +469,12 @@ uptoTypeInference prog fscanErrors fparseErrors fbindingErrors ftypeErrors =
 				Just ast = Right (ast, bindingErrors ++ typeErrors)
 
 instance matchN AST where
-	matchN ast = matchAllN ast
+	matchN ast =
+		addFuncType "print"		(TS (singleton "a") (FuncType [IdentType "a"]				VoidType))		>>|
+		addFuncType "read"		(TS (singleton "a") (FuncType [] 							(IdentType "a")))	>>|
+		addFuncType "isEmpty"	(TS (singleton "a") (FuncType [ArrayType (IdentType "a")]	bBoolType))		>>|
+		addFuncType "main"		(TS newSet			(FuncType [] 							VoidType))		>>|
+		matchAllN ast
 
 instance matchN Decl where
 	matchN d = case d of
@@ -486,62 +489,27 @@ instance matchN VarDecl where
 		addVarType name (type ^^ subst)				>>|
 		return (subst, VarDecl Nothing name e` $ setMetaType m type)
 	matchN (VarDecl (Just specifiedType) name e m) =
-		matchN (VarDecl Nothing name e m)	>>= \(subst, v`).
+		matchN (VarDecl Nothing name e m)	>>= \(subst, VarDecl _ name` e` m`).
 		getVarType name						>>= \derivedType.
 		if (specifiedType instanceOf derivedType)
-			(addVarType name specifiedType >>|
-			 return (subst, v`)					)
-			(error m.MetaData.pos ("Specified type '" <++ specifiedType
-					<++"' conflicts with derived type '" <++ derivedType <++ "'(specified type may be too general)") >>| fail)
+			(	addVarType name specifiedType >>|
+			 	return (subst, VarDecl (Just specifiedType) name` e` m`)
+			)
+			(	error m.MetaData.pos ("Specified type '" <++ specifiedType
+					<++"' conflicts with derived type '" <++ derivedType <++ "'(specified type may be too general)") >>|
+				makeFreshIdentType							>>= \fresh. // Continue type checking with fresh variable
+				addVarType name fresh						>>|
+			 	return (subst, VarDecl (Just specifiedType) name` e` m`)
+			)
 
-returnVar	:== "%return"
-noInfoType	:== IdentType "%noInfo"
-voidType	:== IdentType "%void"
-
-instance matchN FunDecl where
-	matchN (FunDecl fname args Nothing varDecls stmts m) =
-		getEnv											>>= \env.
-		forM args (\_ -> makeFreshIdentType)			>>= \argTypes.
-		//let tempfType = TS newSet (FuncType argTypes rType) in
-		scope fname (
-			addVarType returnVar noInfoType									>>|
-			forM (zip2 args argTypes) (\(arg,type) -> addVarType arg type)	>>|
-			matchAllN varDecls		>>= \(s1, vs`).
-			matchAllN stmts			>>= \(s2, ss`).
-			return (s2 O s1, vs`, ss`)
-		)					>>= \(subst, vs`, ss`).
-		let argTypes` = map (\t.t ^^ subst) argTypes in
-		getVarType (returnVar +++ "@" +++ fname)	>>= \returnVarType.
-		//debug zero ("Final type of " +++ returnVar +++ "@" +++ fname +++ ": " +++ (prettyPrint returnVarType)) >>|
-		let returnType =
-				case returnVarType of
-					IdentType "%noInfo"	= VoidType //Don't use returnVar here: clean will think that it is
-					IdentType "%void"	= VoidType // a new type variable and will always pattern-match
-					_					= returnVarType
-		in
-		let
-			funcType = FuncType argTypes` returnType
-			typeScheme :: TypeScheme
-			typeScheme = TS (difference
-								(freeVars funcType)
-								(freeVars env)
-							) funcType
-		in
-		/*debug zero ("Final return type of " +++ fname +++ ": " +++ (case returnType of
-						Nothing = "Void"
-						Just type = prettyPrint type)) >>|*/
-		//debug zero ("Free variables in env:" +++ (( printAllnl o toList o freeVars) env)) >>|
-		//debug zero ("Free variables in " +++ (toString funcType) +++ ":" +++ (( printAllnl o toList o freeVars) funcType)) >>|
-		addFuncType fname typeScheme >>|
-		return (subst, FunDecl fname args Nothing vs` ss` $ setMetaTS m typeScheme)
 	/*
 	Probleem bij recursief typechecken:
-	p = []; // Type [Bool]
+	var p = []; // Type [Bool]
 	
 	f(a,b,c){ // type: A.a: a Bool [Bool] -> a
 		if(b){
 			int x = f(10,False,[]);//Hier weet je het type van f nog niet goed genoeg!
-			print x;
+			print(x);
 			bool y = f(10,False,p);//Dit zou fout moeten gaan!
 			c = True : [];
 		} else {
@@ -559,15 +527,68 @@ instance matchN FunDecl where
 		Je hebt hier het ene voordeel niet, maar misschien is het beter om het recursieve typechecken gewoon in alle
 		gevallen hetzelfde te laten werken
 	*/
-	matchN (FunDecl fname args (Just specifiedType) varDecls stmts m) =
-		matchN (FunDecl fname args Nothing varDecls stmts m)	>>= \(subst, FunDecl fname` args` n` varDecls` stmts` m`).
-		getFuncType fname										>>= \derivedTS=:(TS _ derivedType).
+
+returnVar	:== "%return"
+noInfoType	:== IdentType "%noInfo"
+
+instance matchN FunDecl where
+	matchN fd=:(FunDecl fname args Nothing varDecls stmts m) =
+		forM args (\_ -> makeFreshIdentType) >>= \argTypes.
+		let freshFuncType = FuncType argTypes noInfoType in
+		matchFunDecl fd (TS newSet freshFuncType) freshFuncType
+	matchN fd=:(FunDecl fname args (Just specifiedType) varDecls stmts m) =
+		forM args (\_ -> makeFreshIdentType) >>= \argTypes.
+		let freshFuncType = FuncType argTypes noInfoType in
+		matchFunDecl fd	(TS (freeVars specifiedType) specifiedType) (freshFuncType)
+													>>= \(subst, FunDecl fname` args` n` varDecls` stmts` m`).
+		getFuncType fname							>>= \derivedTS=:(TS _ derivedType).
 		if (specifiedType instanceOf derivedType)
 			(addFuncType fname 
 				(TS (freeVars specifiedType) specifiedType) >>|
 			return (subst, FunDecl fname` args` n` varDecls` stmts` $ setMetaTS m` (TS (freeVars specifiedType) specifiedType)))
 			(error m.MetaDataTS.pos ("Specified type '" <++ specifiedType
-					<++"' conflicts with derived type '" <++ derivedTS <++ "'(specified type may be too general)") >>| fail)
+					<++"' conflicts with derived type '" <++ derivedTS <++ "'(specified type may be too general)") >>|
+			addFuncType fname 
+				(TS (freeVars freshFuncType) freshFuncType) >>|
+			return (subst, FunDecl fname` args` n` varDecls` stmts` $ setMetaTS m` (TS (freeVars specifiedType) specifiedType))
+			)
+
+// Arguments:
+// - FunDecl:		the FunDecl
+// - TypeScheme:	the typescheme that is used for recursive calls while type-checking the body
+// - Type:	 		The types for the arguments and the implicit return type
+matchFunDecl :: FunDecl TypeScheme Type -> MMonad (Subst, FunDecl)
+matchFunDecl (FunDecl fname args declaredType varDecls stmts m) fInstanceTS (FuncType argTypes rType) =
+	getEnv											>>= \env.
+	addFuncType fname fInstanceTS					>>|
+	scope fname (
+		addVarType returnVar rType										>>|
+		forM (zip2 args argTypes) (\(arg,type) -> addVarType arg type)	>>|
+		matchAllN varDecls		>>= \(s1, vs`).
+		matchAllN stmts			>>= \(s2, ss`).
+		return (s2 O s1, vs`, ss`)
+	)					>>= \(subst, vs`, ss`).
+	let argTypes` = map (\t.t ^^ subst) argTypes in
+	getVarType (returnVar +++ "@" +++ fname)	>>= \returnVarType.
+	//debug zero ("Final type of " +++ returnVar +++ "@" +++ fname +++ ": " +++ (prettyPrint returnVarType)) >>|
+	let
+		returnType =
+			case returnVarType of
+				IdentType "%noInfo"	= VoidType		//Don't use noInfoType here: clean will think that it is
+				_					= returnVarType	// a new variable and will always pattern-match
+		funcType = FuncType argTypes` returnType
+		typeScheme = TS (difference
+							(freeVars funcType)
+							(freeVars env)
+						) funcType
+	in
+	/*debug zero ("Final return type of " +++ fname +++ ": " +++ (case returnType of
+					Nothing = "Void"
+					Just type = prettyPrint type)) >>|*/
+	//debug zero ("Free variables in env:" +++ (( printAllnl o toList o freeVars) env)) >>|
+	//debug zero ("Free variables in " +++ (toString funcType) +++ ":" +++ (( printAllnl o toList o freeVars) funcType)) >>|
+	addFuncType fname typeScheme >>|
+	return (subst, FunDecl fname args declaredType vs` ss` $ setMetaTS m typeScheme)
 
 instance matchN Stmt where
 	matchN stmt = case stmt of
@@ -597,19 +618,19 @@ instance matchN Stmt where
 		StmtRet e			m =
 			getVarType returnVar		>>= \rType.
 			(case rType of
-				noInfoType	= makeFreshIdentType >>= \a.
-					//debug zero ("making fresh return type for " +++ (prettyPrint (StmtRet e m))) >>|
+				IdentType "%noInfo"	=
+					makeFreshIdentType >>= \a.
 					addVarType returnVar a
-				voidType	= error m.MetaData.pos "Non-matching return types"
-				type		= return type)
+				VoidType			= error m.MetaData.pos "Non-matching return types" >>| fail
+				type				= return type)
 										>>= \a.
 			match e a					>>= \(subst, e`).
 			return (subst, StmtRet e` m)
 		StmtRetV			m =
 			getVarType returnVar		>>= \rType.
 			case rType of
-				IdentType "%noInfo"	= addVarType returnVar voidType >>| return (idSubst, StmtRetV m)
-				IdentType "%void"	= return (idSubst, StmtRetV m)
+				IdentType "%noInfo"	= addVarType returnVar VoidType >>| return (idSubst, StmtRetV m)
+				VoidType			= return (idSubst, StmtRetV m)
 				_					= error m.MetaData.pos "Non-matching return types" >>| fail
 
 

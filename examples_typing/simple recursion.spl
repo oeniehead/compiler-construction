@@ -1,0 +1,23 @@
+q(a){
+	return q(a) + 1;
+}
+
+main(){
+	return q(10) + q('h');
+}
+
+g(a) :: a -> Int{
+	return g(a) + 1;
+}
+
+h(a) :: Bool -> Int{
+	return h(a) + 1;
+}
+
+// this should fail:
+/*
+i(a) :: Bool -> a{
+	return i(a) + 1;
+}
+*/
+

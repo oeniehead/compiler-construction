@@ -289,6 +289,7 @@ where
 			, env		:: Env
 			, subst		:: Subst
 			, label		:: String //labeling for local variables
+			, pos		:: Position
 			}
 
 fail :: MMonad a
@@ -301,9 +302,14 @@ makeFreshVar = M \st.(Just $ "%var" +++(toString st.counter), {st & counter=st.c
 makeFreshIdentType :: MMonad Type
 makeFreshIdentType = fmap (\id.IdentType id) makeFreshVar
 
-error :: Position String -> MMonad ()
-error pos msg = M \st.(Just (), {st & errors = [makeError pos ERROR TypeChecking msg: st.errors]})
-debug pos msg = M \st.(Just (), {st & errors = [makeError pos DEBUG TypeChecking msg: st.errors]})
+error :: String -> MMonad ()
+error msg = M \st.(Just (), {st & errors = [makeError st.MState.pos ERROR TypeChecking msg: st.errors]})
+debug msg = M \st.(Just (), {st & errors = [makeError st.MState.pos DEBUG TypeChecking msg: st.errors]})
+
+logEnv :: MMonad ()
+logEnv =
+	getEnv		>>= \env.
+	debug ("\nEnv vars:\n" +++ (mapToString env.varTypes) +++ "\nEnv funcs:\n" +++ (mapToString env.funcTypes))
 
 getEnv :: MMonad Env
 getEnv = M \st.(Just st.env,st)
@@ -323,10 +329,22 @@ setLabel s = M \st.(Just s,{st & label = s})
 getLabel :: MMonad String
 getLabel = M \st.(Just st.label,st)	
 
+getPos :: MMonad Position
+getPos = M \st.(Just st.MState.pos, st)
+
+setPos :: Position -> MMonad Position
+setPos pos = M \st.(Just pos, {st & MState.pos = pos})
+
+try :: (MMonad a) (MMonad a) -> MMonad a
+try (M ma) (M me) = M \st.
+	case ma st of
+		(Nothing, st2)	= me st2
+		justState		= justState
+
 mRun :: (MMonad a) -> (Maybe a, [Error])
 mRun (M ma) =
-	let (maybeA, st) = ma {counter = 0, errors = [], label = "", env = newEnv, subst = idSubst}
-	in (maybeA, st.errors)
+	let (maybeA, st) = ma {counter = 0, errors = [], label = "", env = newEnv, subst = idSubst, pos = zero}
+	in (maybeA, reverse st.errors)
 
 //derived combinators
 mUnify :: Type Type -> MMonad Subst // calculate the unification, immediately apply it to the environment and the substitution function.
@@ -334,7 +352,7 @@ mUnify t1 t2 = case unify t1 t2 of
 	Just subst	=
 			changeEnv (\env. env ^^ subst)	>>|
 			addSubst subst
-	Nothing		= error zero ("Cannot unify " <++ t1 <++ " and " <++ t2) >>| fail
+	Nothing		= error ("Cannot unify " <++ t1 <++ " and " <++ t2) >>| fail
 
 scope :: String (MMonad a) -> MMonad a
 scope s ma =
@@ -364,7 +382,8 @@ getVarType id =
 		Just t	= return t
 		_		= case 'm'.get id env.varTypes of
 			Just t	= return t
-			_		= error zero ("Variable '" +++ id +++ "' not defined") >>| fail//TODO: position
+			_		=
+				error ("Variable '" +++ id +++ "' not defined") >>| fail
 
 getFuncType :: Id -> MMonad TypeScheme
 getFuncType id =
@@ -374,7 +393,7 @@ getFuncType id =
 		Just t	= return t
 		_		= case 'm'.get id env.funcTypes of
 			Just t	= return t
-			_		= error zero ("Function '" +++ id +++ "' not defined") >>| fail//TODO: position
+			_		= error ("Function '" +++ id +++ "' not defined") >>| fail 
 
 //AMF instances
 mAp :: (MMonad (a -> b)) (MMonad a) -> MMonad b
@@ -460,7 +479,7 @@ uptoTypeInference ::
 	([Error] -> a)
 		-> Either a (AST, [Error])
 uptoTypeInference prog fscanErrors fparseErrors fbindingErrors ftypeErrors =
-	case uptoBinding prog fscanErrors fparseErrors fbindingErrors of
+	case uptoBinding prog fscanErrors fparseErrors fbindingErrors of//uptoBinding uptoParse
 		Left a	= Left a
 		Right (ast, bindingErrors) =
 			let (mAST, typeErrors) = typeInference ast
@@ -478,24 +497,46 @@ instance matchN AST where
 
 instance matchN Decl where
 	matchN d = case d of
-		Var v = matchN v >>= \(s, v`). return (s, Var v`)
-		Fun f = matchN f >>= \(s, f`). return (s, Fun f`)
+		Var v =
+			try
+				(matchN v >>= \(s, v`). return (s, Var v`))
+				(
+					let (VarDecl _ name _ _) = v in
+					makeFreshIdentType	>>= \a.
+					addVarType name a	>>|
+					return (idSubst, Var v)
+				)
+		Fun f =
+			try
+				(matchN f >>= \(s, f`). return (s, Fun f`))
+				(
+					let (FunDecl name args _ _ _ _) = f in
+					forM args (\_ -> makeFreshVar)	>>= \argTypes.
+					makeFreshVar					>>= \a.
+					addFuncType name (TS
+							(fromList [a:argTypes])
+							(FuncType (map IdentType argTypes) (IdentType a))
+						)	>>|
+					return (idSubst, Fun f)
+				)
 
 instance matchN VarDecl where
 	matchN v=:(VarDecl Nothing name e m) =
+		setPos m.MetaData.pos						>>|
 		makeFreshIdentType							>>= \type.
 		//debug zero ("Fresh type " +++ (prettyPrint type) +++ " for " +++ (prettyPrint v)) >>|
 		match e type								>>= \(subst, e`).
 		addVarType name (type ^^ subst)				>>|
 		return (subst, VarDecl Nothing name e` $ setMetaType m type)
 	matchN (VarDecl (Just specifiedType) name e m) =
+		setPos m.MetaData.pos				>>|
 		matchN (VarDecl Nothing name e m)	>>= \(subst, VarDecl _ name` e` m`).
 		getVarType name						>>= \derivedType.
 		if (specifiedType instanceOf derivedType)
 			(	addVarType name specifiedType >>|
 			 	return (subst, VarDecl (Just specifiedType) name` e` m`)
 			)
-			(	error m.MetaData.pos ("Specified type '" <++ specifiedType
+			(	error ("Specified type '" <++ specifiedType
 					<++"' conflicts with derived type '" <++ derivedType <++ "'(specified type may be too general)") >>|
 				makeFreshIdentType							>>= \fresh. // Continue type checking with fresh variable
 				addVarType name fresh						>>|
@@ -533,10 +574,12 @@ noInfoType	:== IdentType "%noInfo"
 
 instance matchN FunDecl where
 	matchN fd=:(FunDecl fname args Nothing varDecls stmts m) =
+		setPos m.MetaDataTS.pos					>>|
 		forM args (\_ -> makeFreshIdentType) >>= \argTypes.
 		let freshFuncType = FuncType argTypes noInfoType in
 		matchFunDecl fd (TS newSet freshFuncType) freshFuncType
 	matchN fd=:(FunDecl fname args (Just specifiedType) varDecls stmts m) =
+		setPos m.MetaDataTS.pos				>>|
 		forM args (\_ -> makeFreshIdentType) >>= \argTypes.
 		let freshFuncType = FuncType argTypes noInfoType in
 		matchFunDecl fd	(TS (freeVars specifiedType) specifiedType) (freshFuncType)
@@ -546,7 +589,7 @@ instance matchN FunDecl where
 			(addFuncType fname 
 				(TS (freeVars specifiedType) specifiedType) >>|
 			return (subst, FunDecl fname` args` n` varDecls` stmts` $ setMetaTS m` (TS (freeVars specifiedType) specifiedType)))
-			(error m.MetaDataTS.pos ("Specified type '" <++ specifiedType
+			(error ("Specified type '" <++ specifiedType
 					<++"' conflicts with derived type '" <++ derivedTS <++ "'(specified type may be too general)") >>|
 			addFuncType fname 
 				(TS (freeVars freshFuncType) freshFuncType) >>|
@@ -559,6 +602,7 @@ instance matchN FunDecl where
 // - Type:	 		The types for the arguments and the implicit return type
 matchFunDecl :: FunDecl TypeScheme Type -> MMonad (Subst, FunDecl)
 matchFunDecl (FunDecl fname args declaredType varDecls stmts m) fInstanceTS (FuncType argTypes rType) =
+	setPos m.MetaDataTS.pos							>>|
 	getEnv											>>= \env.
 	addFuncType fname fInstanceTS					>>|
 	scope fname (
@@ -591,119 +635,126 @@ matchFunDecl (FunDecl fname args declaredType varDecls stmts m) fInstanceTS (Fun
 	return (subst, FunDecl fname args declaredType vs` ss` $ setMetaTS m typeScheme)
 
 instance matchN Stmt where
-	matchN stmt = case stmt of
-		StmtIf c body mElse	m =
-			match c bBoolType			>>= \(s1, c`).
-			matchAllN body				>>= \(s2, body`).
-			let s3 = s2 O s1 in
-			case mElse of
-				Nothing		= return (s3, StmtIf c` body` Nothing m)
-				Just else	=
-					matchAllN else		>>= \(s4, else`).
-					return (s4 O s3, StmtIf c` body` (Just else`) m)
-		StmtWhile c body	m =
-			match c bBoolType			>>= \(s1, c`).
-			matchAllN body				>>= \(s2, body`).
-			return (s2 O s1, StmtWhile c` body` m)
-		StmtAss iwf e		m =
-			makeFreshIdentType			>>= \a.
-			match iwf a					>>= \(s1, iwf`).
-			match e (a ^^ s1)			>>= \(s2, e`).
-			return (s2 O s1, StmtAss iwf` e` m)
-		StmtFunCall funCall	m =
-			makeFreshIdentType			>>= \a.
-			//debug zero ("Fresh type " +++ (prettyPrint a) +++ " for " +++ (prettyPrint stmt)) >>|
-			match funCall a				>>= \(subst, funCall`).
-			return (subst, StmtFunCall funCall` m) 
-		StmtRet e			m =
-			getVarType returnVar		>>= \rType.
-			(case rType of
-				IdentType "%noInfo"	=
-					makeFreshIdentType >>= \a.
-					addVarType returnVar a
-				VoidType			= error m.MetaData.pos "Non-matching return types" >>| fail
-				type				= return type)
-										>>= \a.
-			match e a					>>= \(subst, e`).
-			return (subst, StmtRet e` m)
-		StmtRetV			m =
-			getVarType returnVar		>>= \rType.
-			case rType of
-				IdentType "%noInfo"	= addVarType returnVar VoidType >>| return (idSubst, StmtRetV m)
-				VoidType			= return (idSubst, StmtRetV m)
-				_					= error m.MetaData.pos "Non-matching return types" >>| fail
+	matchN stmt =
+		setPos (getMeta stmt).MetaData.pos >>|
+		case stmt of
+			StmtIf c body mElse	m =
+				match c bBoolType			>>= \(s1, c`).
+				matchAllN body				>>= \(s2, body`).
+				let s3 = s2 O s1 in
+				case mElse of
+					Nothing		= return (s3, StmtIf c` body` Nothing m)
+					Just else	=
+						matchAllN else		>>= \(s4, else`).
+						return (s4 O s3, StmtIf c` body` (Just else`) m)
+			StmtWhile c body	m =
+				match c bBoolType			>>= \(s1, c`).
+				matchAllN body				>>= \(s2, body`).
+				return (s2 O s1, StmtWhile c` body` m)
+			StmtAss iwf e		m =
+				makeFreshIdentType			>>= \a.
+				match iwf a					>>= \(s1, iwf`).
+				match e (a ^^ s1)			>>= \(s2, e`).
+				return (s2 O s1, StmtAss iwf` e` m)
+			StmtFunCall funCall	m =
+				makeFreshIdentType			>>= \a.
+				//debug zero ("Fresh type " +++ (prettyPrint a) +++ " for " +++ (prettyPrint stmt)) >>|
+				match funCall a				>>= \(subst, funCall`).
+				return (subst, StmtFunCall funCall` m) 
+			StmtRet e			m =
+				getVarType returnVar		>>= \rType.
+				(case rType of
+					IdentType "%noInfo"	=
+						makeFreshIdentType >>= \a.
+						addVarType returnVar a
+					VoidType			= error "Non-matching return types" >>| fail
+					type				= return type)
+											>>= \a.
+				match e a					>>= \(subst, e`).
+				return (subst, StmtRet e` m)
+			StmtRetV			m =
+				getVarType returnVar		>>= \rType.
+				case rType of
+					IdentType "%noInfo"	= addVarType returnVar VoidType >>| return (idSubst, StmtRetV m)
+					VoidType			= return (idSubst, StmtRetV m)
+					_					= error "Non-matching return types" >>| fail
 
 
 instance match Expr where
-	match expression t = case expression of
-		ExpIdent iwf		m =
-			match iwf t		>>= \(subst, iwf`).
-			return (subst, ExpIdent iwf $ setMetaType m t)
-		ExpBinOp e1 op e2	_ = case op of
-				OpPlus		= match2 expression bIntType bIntType bIntType t
-				OpMinus		= match2 expression bIntType bIntType bIntType t
-				OpMult		= match2 expression bIntType bIntType bIntType t
-				OpDiv		= match2 expression bIntType bIntType bIntType t
-				OpMod		= match2 expression bIntType bIntType bIntType t
-				OpEquals	= 
-					makeFreshIdentType	>>= \a.
-					match2 expression a a bBoolType t
-				OpLT		= match2 expression bIntType bIntType bBoolType t
-				OpGT		= match2 expression bIntType bIntType bBoolType t
-				OpLTE		= match2 expression bIntType bIntType bBoolType t
-				OpGTE		= match2 expression bIntType bIntType bBoolType t
-				OpNE		= 
-					makeFreshIdentType	>>= \a.
-					match2 expression a a bBoolType t
-				OpAnd		= match2 expression bBoolType bBoolType bBoolType t
-				OpOr		= match2 expression bBoolType bBoolType bBoolType t
-				OpConcat	=
-					makeFreshIdentType	>>= \a.
-					match2 expression a (ArrayType a) (ArrayType a) t
-		ExpUnOp op e		_ = case op of
-				OpNot		= match1 expression bBoolType bBoolType t
-				OpNeg		= match1 expression bIntType  bIntType t
-		ExpInt i			m =
-			mUnify t bIntType					>>= \subst.
-			return (subst, ExpInt i $ setMetaType m bIntType)
-		ExpChar c			m =
-			mUnify t bCharType					>>= \subst.
-			return (subst, ExpChar c $ setMetaType m bCharType)
-		ExpBool b			m =
-			mUnify t bBoolType					>>= \subst.
-			return (subst, ExpBool b $ setMetaType m bBoolType)
-		ExpFunCall funCall	m =
-			match funCall t						>>= \(subst, funCall`).
-			return (subst, ExpFunCall funCall` $ setMetaType m t)
-		ExpEmptyArray		m =
-			makeFreshIdentType					>>= \a.
-			mUnify t (ArrayType a)				>>= \subst.
-			return (subst, ExpEmptyArray $ setMetaType m (ArrayType a))
-		ExpTuple e1 e2		m =
-			makeFreshIdentType					>>= \a.
-			makeFreshIdentType					>>= \b.
-			match e1 a					>>= \(s1, e1`).
-			match e2 b					>>= \(s2, e2`).
-			let s3 = s2 O s1 in
-			mUnify (t ^^ s3) ((TupleType a b) ^^ s3)	>>= \s4.
-			return (s4 O s3, ExpTuple e1` e2` $ setMetaType m (TupleType a b))
-	where
-		match1 :: Expr Type Type Type -> MMonad (Subst, Expr)
-		match1 (ExpUnOp op e m) t1 resultType t =
-			match e t1					>>= \(s1, e`).
-			mUnify (t ^^ s1) resultType	>>= \s2.
-			return (s2 O s1, ExpUnOp op e` $ setMetaType m resultType)
-		
-		match2 :: Expr Type Type Type Type -> MMonad (Subst, Expr)
-		match2 (ExpBinOp e1 op e2 m) t1 t2 resultType t =
-			match e1 t1					>>= \(s1, e1`).
-			match e2 (t2 ^^ s1)			>>= \(s2, e2`).
-			let s3 = s2 O s1 in
-			mUnify (t ^^ s3) (resultType ^^ s3)	>>= \s4.
-			return (s4 O s3, ExpBinOp e1` op e2` $ setMetaType m resultType)
+	match expression t =
+		setPos (getMeta expression).MetaData.pos >>|
+		case expression of
+			ExpIdent iwf		m =
+				match iwf t		>>= \(subst, iwf`).
+				return (subst, ExpIdent iwf $ setMetaType m t)
+			ExpBinOp e1 op e2	_ = case op of
+					OpPlus		= match2 expression bIntType bIntType bIntType t
+					OpMinus		= match2 expression bIntType bIntType bIntType t
+					OpMult		= match2 expression bIntType bIntType bIntType t
+					OpDiv		= match2 expression bIntType bIntType bIntType t
+					OpMod		= match2 expression bIntType bIntType bIntType t
+					OpEquals	= 
+						makeFreshIdentType	>>= \a.
+						match2 expression a a bBoolType t
+					OpLT		= match2 expression bIntType bIntType bBoolType t
+					OpGT		= match2 expression bIntType bIntType bBoolType t
+					OpLTE		= match2 expression bIntType bIntType bBoolType t
+					OpGTE		= match2 expression bIntType bIntType bBoolType t
+					OpNE		= 
+						makeFreshIdentType	>>= \a.
+						match2 expression a a bBoolType t
+					OpAnd		= match2 expression bBoolType bBoolType bBoolType t
+					OpOr		= match2 expression bBoolType bBoolType bBoolType t
+					OpConcat	=
+						makeFreshIdentType	>>= \a.
+						match2 expression a (ArrayType a) (ArrayType a) t
+			ExpUnOp op e		_ = case op of
+					OpNot		= match1 expression bBoolType bBoolType t
+					OpNeg		= match1 expression bIntType  bIntType t
+			ExpInt i			m =
+				mUnify t bIntType					>>= \subst.
+				return (subst, ExpInt i $ setMetaType m bIntType)
+			ExpChar c			m =
+				mUnify t bCharType					>>= \subst.
+				return (subst, ExpChar c $ setMetaType m bCharType)
+			ExpBool b			m =
+				mUnify t bBoolType					>>= \subst.
+				return (subst, ExpBool b $ setMetaType m bBoolType)
+			ExpFunCall funCall	m =
+				match funCall t						>>= \(subst, funCall`).
+				return (subst, ExpFunCall funCall` $ setMetaType m t)
+			ExpEmptyArray		m =
+				makeFreshIdentType					>>= \a.
+				mUnify t (ArrayType a)				>>= \subst.
+				return (subst, ExpEmptyArray $ setMetaType m (ArrayType a))
+			ExpTuple e1 e2		m =
+				makeFreshIdentType					>>= \a.
+				makeFreshIdentType					>>= \b.
+				match e1 a					>>= \(s1, e1`).
+				match e2 b					>>= \(s2, e2`).
+				let s3 = s2 O s1 in
+				mUnify (t ^^ s3) ((TupleType a b) ^^ s3)	>>= \s4.
+				return (s4 O s3, ExpTuple e1` e2` $ setMetaType m (TupleType a b))
+		where
+			match1 :: Expr Type Type Type -> MMonad (Subst, Expr)
+			match1 (ExpUnOp op e m) t1 resultType t =
+				setPos m.MetaData.pos		>>|
+				match e t1					>>= \(s1, e`).
+				mUnify (t ^^ s1) resultType	>>= \s2.
+				return (s2 O s1, ExpUnOp op e` $ setMetaType m resultType)
+			
+			match2 :: Expr Type Type Type Type -> MMonad (Subst, Expr)
+			match2 (ExpBinOp e1 op e2 m) t1 t2 resultType t =
+				setPos m.MetaData.pos		>>|
+				match e1 t1					>>= \(s1, e1`).
+				match e2 (t2 ^^ s1)			>>= \(s2, e2`).
+				let s3 = s2 O s1 in
+				mUnify (t ^^ s3) (resultType ^^ s3)	>>= \s4.
+				return (s4 O s3, ExpBinOp e1` op e2` $ setMetaType m resultType)
 
 instance match FunCall where
 	match (FunCall name args m) t =
+		setPos m.MetaData.pos								>>|
 		getFuncType name									>>= \(TS boundedTypes fType).
 		//debug zero ("Retrieved type of " +++ name +++ ": " +++ (toString (TS boundedTypes fType))) >>|
 		makeInstanceFuncType (toList boundedTypes) fType	>>= \(FuncType argTypes rType).
@@ -729,6 +780,7 @@ makeInstanceFuncType _ fType = return fType
 
 instance match IdWithFields where
 	match iwf t =
+		setPos (getMeta iwf).MetaData.pos		>>|
 		makeFreshIdentType	>>= \a.
 		makeFreshIdentType	>>= \b.
 		case iwf of
@@ -808,7 +860,7 @@ checkMap map (var,type) f =
 
 mapToString :: (Map k a) -> String | toString k & toString a
 mapToString m = concat (
-	map (\(k,a) -> (toString k) +++ "\t" +++ (toString a) +++ "\n") ('m'.toList m)
+	map (\(k,a) -> "key:" +++ (toString k) +++ "\tvalue:" +++ (toString a) +++ "\n") ('m'.toList m)
 	)
 
 checkVars :: String [(Id, Type)] -> [Testcase]

@@ -40,6 +40,15 @@ instance getMeta Expr where
 	getMeta (ExpEmptyArray m) = m
 	getMeta (ExpTuple _ _ m) = m
 
+instance getMeta Stmt where
+	getMeta (StmtIf _ _ _ m)        = m
+	getMeta (StmtWhile _ _ m)       = m
+	getMeta (StmtAss _ _ m)         = m
+	getMeta (StmtFunCall _ m)       = m
+	getMeta (StmtRet _ m)           = m
+	getMeta (StmtRetV m)            = m
+
+
 derive gEq		MetaData, MetaDataTS, Decl, VarDecl, FunDecl, Type, TypeScheme, BasicType,
 				Stmt, Expr, FunCall, BinOp, UnOp, IdWithFields, Field, Set
 derive gString 	MetaData, MetaDataTS, Decl, VarDecl, FunDecl, Type, TypeScheme, BasicType,

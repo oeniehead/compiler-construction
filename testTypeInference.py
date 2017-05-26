@@ -1,13 +1,19 @@
 # Use python 3.x
 import os
 import subprocess
+import sys
 
 example_dir = 'examples_typing'
 
 outputs = []
 
-for file in os.listdir(example_dir):
-    path = os.path.join(example_dir, file)
+if len(sys.argv) > 1:
+    testFiles = sys.argv[1:]
+else:
+    testFiles = [os.path.join(example_dir, file)
+                 for file in os.listdir(example_dir)]
+
+for path in testFiles:
     with open(path, 'r') as f:
         prog = f.read()
 

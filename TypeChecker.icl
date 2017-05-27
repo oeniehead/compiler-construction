@@ -1,7 +1,9 @@
 implementation module TypeChecker
 
 import CustomStdEnv
-import SPLParser
+from Token import :: Token
+from Parser import parser
+import AST
 import Misc
 import Error
 import Spec

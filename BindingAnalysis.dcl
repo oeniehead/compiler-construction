@@ -1,6 +1,7 @@
 definition module BindingAnalysis
 
-import SPLParser
+import Error, Misc, AST
+
 from Data.Either import :: Either
 
 import StdGeneric

@@ -11,7 +11,7 @@ import StdGeneric
 import CustomStdEnv
 
 import Scanner
-import SPLParser
+
 import Error
 import Misc
 import PrettyPrinter

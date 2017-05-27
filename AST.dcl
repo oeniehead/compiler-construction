@@ -1,23 +1,8 @@
-definition module SPLParser
+definition module AST
 
-import Token
 import Misc
-import Error
-from Data.Either import :: Either
-import GenEq
-import GenString
 from Data.Set import :: Set
 
-parser :: [Token] -> Either [Error] AST
-
-/* Scan and parse
- * String				: the program
- * [Error] -> Maybe a   : should we stop and return (Left a) if there are scanner errors?
- * [Error] -> a			: what should we do if the parser failed?(you get the errors of both scanner and parser)
- * Return				: (Left a) with the specified a if failed
- *						  (Right (ast,log)) if succeeded, with the log of the scanner
- */
-uptoParse :: String ([Error] -> Maybe a) ([Error] -> a) -> Either a (AST,[Error])
 
 // -- Types
 :: Type
@@ -42,8 +27,6 @@ bBoolType :== BasicType BoolType
 bCharType :== BasicType CharType
 
 // -- SPL
-:: AST :== [Decl]
-
 :: MetaData = { pos		:: Position
 			  , type	:: Maybe Type
 			  }
@@ -66,6 +49,8 @@ class mapMeta a :: (MetaData -> MetaData) (MetaDataTS -> MetaDataTS) a -> a
 
 instance mapMeta Decl, VarDecl, FunDecl, Stmt, Expr, FunCall, IdWithFields
 instance mapMeta [a] | mapMeta a
+
+:: AST :== [Decl]
 
 // -- Declarations
 :: Decl

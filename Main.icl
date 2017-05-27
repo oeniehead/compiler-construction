@@ -12,7 +12,8 @@ import GenString
 import CustomStdEnv
 
 import Scanner
-import SPLParser
+import AST
+import Parser
 import Error
 import Misc
 import PrettyPrinter

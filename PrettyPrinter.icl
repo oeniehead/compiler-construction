@@ -1,12 +1,10 @@
 implementation module PrettyPrinter
 
 import Indentation
-import SPLParser
+import AST
 import Misc
 import Data.List
 import qualified Data.Set as s
-
-debug :== True
 
 prettyPrint :: a -> String | toShow a
 prettyPrint item = show (toShow item)

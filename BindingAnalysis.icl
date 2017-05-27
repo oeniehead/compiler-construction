@@ -1,6 +1,7 @@
 implementation module BindingAnalysis
 
-import SPLParser
+import AST
+from Parser import uptoParse
 
 import StdGeneric
 import GenString

@@ -25,6 +25,8 @@ import CustomStdEnv
 :: BraceType	= Open  | Close
 :: BraceStyle	= Curly | Round | Square
 
+getOriginal :: Token -> String
+
 derive gString Token, TokenType, BraceType, BraceStyle
 
 instance toString Token

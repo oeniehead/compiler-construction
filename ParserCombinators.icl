@@ -109,6 +109,12 @@ pGetPos = Parser (\tokens ->
 		)
 	)
 
+try :: (Parser t a) (Parser t a) -> Parser t a
+try p1 p2 = Parser \tokens.
+	case runParser p1 tokens of
+		([], log)	= runParser p2 tokens
+		results		= results
+		
 
 // -- Derived convenience parsers
 (@!) infixr 4 :: (Parser t a) Error -> Parser t a

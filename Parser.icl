@@ -40,9 +40,22 @@ pMaybe parse = (Just <$> parse) <<|> (pYield Nothing)
 pBetweenBrackets :: BraceStyle (Parser Token a) -> Parser Token a
 pBetweenBrackets bstyle parse = pSatisfyBrace Open bstyle *> parse <* pSatisfyBrace Close bstyle
 
+pRequire :: TokenType String -> Parser Token Token
+pRequire type string =
+	try
+		(pSatisfyTokenTypeString type [string])
+		(
+			(try pGetPos (return zero))			>>= \pos.
+		 	pError (makeError pos ERROR Parsing (string +++ " expected"))
+		 )
 
 parser :: [Token] -> Either [Error] AST
-parser tokens = parse parseAST tokens
+parser tokens =
+	case runParser parseAST tokens of
+		([]		, log) = Left [makeError zero FATAL Parsing "No parse results":log]
+		(results, log) = case [r \\ (r, []) <- results] of
+			[r: _]	= Right r
+			_		= Left [makeError zero FATAL Parsing "No parse results with a fully consumed input":log]
 
 uptoParse :: String ([Error] -> Maybe a) ([Error] -> a) -> Either a (AST,[Error])
 uptoParse prog fscanErrors fparseErrors =
@@ -61,12 +74,32 @@ parseAST =	pMany parseDecl				>>= \decls.
 			return decls
 
 parseDecl :: Parser Token Decl
-parseDecl = //withMeta \meta.
-	(
-		parseVarDecl >>= \v. pYield (Var v /*meta*/)
-	) <<|> (
-		parseFunDecl >>= \f. pYield (Fun f /*meta*/)
-	)
+parseDecl =
+	try
+		(
+			(
+				parseVarDecl >>= \v. pYield (Var v)
+			) <<|> (
+				parseFunDecl >>= \f. pYield (Fun f)
+			)
+		)
+		(	skipThings >>| parseDecl	)
+where
+	skipThings :: Parser Token ()
+	skipThings =
+		try
+			(
+				(
+					(pSatisfyTokenType TerminatorToken)
+					<<|>
+					(pSatisfyTokenType TerminatorToken)
+				) >>| return ()
+			)
+			(
+				pSatisfy (const True)	>>|
+				skipThings
+			)
+		
 
 parseVarDecl :: Parser Token VarDecl
 parseVarDecl =  withPos							\pos.
@@ -93,15 +126,14 @@ parseFunDecl = withPos												\pos.
 	return (FunDecl name args mType vardecls stmts {pos=pos, typeScheme=Nothing})
 				
 parseIds :: Parser Token [Id]
-parseIds = (
-						parseId
-					>>= \t. pMany (
-							pSatisfyTokenType Comma
-						>>| parseId)
-					>>= \l. pYield [t : l]
-				) <<|> (
-					pYield []
-				)
+parseIds =
+	(
+		parseId	>>= \t.
+		pMany (	pSatisfyTokenType Comma >>| parseId) >>= \l.
+		pYield [t : l]
+	) <<|> (
+		pYield []
+	)
 
 parseFunType :: Parser Token Type
 parseFunType =

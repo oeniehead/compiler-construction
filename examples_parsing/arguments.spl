@@ -1,0 +1,21 @@
+function (n, b, l) :: Int Bool [Int] -> [Int] 
+{
+    print(n);
+    print(b);
+    print(l);
+}
+
+main () :: -> Void
+{
+    [Int] list = 1:2:3:[];
+
+    // No arguments
+    function();
+    // One argument
+    function(5);
+    // Two arguments
+    function(10, True);
+    // Three arguments
+    function(15, False, list);
+}
+

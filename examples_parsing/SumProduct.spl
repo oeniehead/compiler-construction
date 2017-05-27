@@ -1,0 +1,19 @@
+sum(list) :: [Int] -> Int {
+	if (isEmpty(list)) { return 0;	}
+	return list.hd + sum(list.tl);
+}
+
+product(list) :: [Int] -> Int {
+	if (isEmpty(list)) {return 1;	}
+	return list.hd * sum(list.tl);
+}
+
+sum(list) :: [Bool] -> Bool {
+	if (isEmpty(list)) { return False;	}
+	return list.hd || sum(list.tl);
+}
+
+product(list) :: [Bool] -> Bool {
+	if (isEmpty(list)) { return True;	}
+	return list.hd && sum(list.tl);
+}

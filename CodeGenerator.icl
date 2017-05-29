@@ -50,6 +50,8 @@ instance toString CGInst where toString x = gString{|*|} x
 	| MP
 	| RR
 	| PC
+	| HP
+	| BP
 
 instance zero CGMonadState
 	where 
@@ -59,7 +61,7 @@ instance zero CGMonadState
 				arguments = [],
 				localVariables = [],
 				errors = [],
-				currentFunction = "",
+				currentFunction = "_bootstrap",
 				counter = 0
 			}
 			
@@ -155,6 +157,8 @@ runCodeLabeler instrs = foldl (+++)  "" (map labelInst instrs)
 		resolveArgument (Register SP) = " SP"
 		resolveArgument (Register RR) = " RR"
 		resolveArgument (Register PC) = " PC" 
+		resolveArgument (Register HP) = " HP"
+		resolveArgument (Register BP) = " R5"
 	
 runCodeGenerator :: AST -> Either [CGInst] [Error]
 runCodeGenerator ast = 
@@ -400,6 +404,137 @@ generateRead _ = error {
 							stage = CodeGeneration,
 							message = "Cannot read non-basic types"
 						}
+						
+allocate :: (CGMonad ()) -> (CGMonad ())
+allocate expr = generateLabel >>= \boundLabel.
+				generateLabel >>= \endLabel.
+				registerInstructions [ 
+					Inst "ldr" [Register HP] Nothing,
+					Inst "ldr" [Register BP] Nothing,
+					Inst "eq" [] Nothing,
+					
+					// HP != BP, allocate and move HP to next empty spot
+					Inst "brt" [Label boundLabel] Nothing,
+					Inst "ldh" [Val "2"] Nothing,
+					Inst "ldc" [Val "1"] Nothing
+				]
+			>>| expr
+			>>| registerInstructions [
+					Inst "stmh" [Val "3"] Nothing,
+					Inst "swp" [] Nothing,
+					Inst "str" [Register HP] Nothing,
+					Inst "bra" [Label endLabel] Nothing,
+					
+					// HP == BP, allocate and copy HP to BP
+					Inst "nop" [] (Just boundLabel),
+					Inst "ldc" [Val "1"] Nothing
+				]
+			>>| expr
+			>>| registerInstructions [
+					Inst "stmh" [Val "3"] Nothing,
+					Inst "ldr" [Register HP] Nothing,
+					Inst "str" [Register BP] Nothing,
+					
+					// Common return
+					Inst "nop" [] (Just endLabel)
+				]
+				
+free :: Type -> (CGMonad ())
+free (BasicType _) = registerInstructions [
+					Inst "ajs" [Val "-1"] Nothing
+				]
+free (TupleType aType bType) = 
+				registerInstructions [
+					// Copy reference and load block on stack
+					Inst "sts" [Val "0"] Nothing,
+					Inst "ldma" [Val "3"] Nothing			
+				]
+				// Free both values
+			>>| free aType
+			>>| free bType
+			>>| generateLabel >>= \endLabel.
+				generateLabel >>= \ignoreLabel.
+				// TODO: this can be factored out
+				registerInstructions [
+					// Decrease counter
+					Inst "ldc" [Val "1"] Nothing,
+					Inst "sub" [] Nothing,
+					
+					// Duplicate result
+					Inst "lds" [Val "0"] Nothing,
+					
+					// Store new counter on the stack
+					Inst "lds" [Val "-2"] Nothing,
+					Inst "sta" [Val "-2"] Nothing,
+					
+					// If c == 0, push this empty spot
+					Inst "ldc" [Val "0"] Nothing,
+					Inst "eq" [] Nothing,
+					Inst "brf" [Label ignoreLabel] Nothing,
+					
+					Inst "ldc" [Val "2"] Nothing,
+					Inst "sub" [] Nothing,
+					
+					// Swap values with HP, and store reference on stack
+					Inst "lds" [Val "0"] Nothing,
+					Inst "swpr" [Register HP] Nothing,
+					Inst "sta" [Val "0"] Nothing,
+					
+					Inst "bra" [Label endLabel] Nothing,
+					Inst "ajs" [Val "-1"] (Just ignoreLabel),
+					
+					// Common return
+					Inst "nop" [] (Just endLabel)
+				]
+free (ArrayType type) = 
+				generateLabel >>= \loopLabel.
+				registerInstructions [
+					// Copy reference and load block on stack
+					Inst "sts" [Val "0"] (Just loopLabel),
+					Inst "ldma" [Val "3"] Nothing			
+				]
+				// Free both values
+			>>| free type
+			>>| generateLabel >>= \endLabel.
+				generateLabel >>= \ignoreLabel.
+				// TODO: this can be factored out
+				registerInstructions [
+					Inst "swp" [] Nothing,
+					
+					// Decrease counter
+					Inst "ldc" [Val "1"] Nothing,
+					Inst "sub" [] Nothing,
+					
+					// Duplicate result
+					Inst "lds" [Val "0"] Nothing,
+					
+					// Store new counter on the stack
+					Inst "lds" [Val "-3"] Nothing,
+					Inst "sta" [Val "-2"] Nothing,
+					
+					// If c == 0, push this empty spot
+					Inst "ldc" [Val "0"] Nothing,
+					Inst "eq" [] Nothing,
+					Inst "brf" [Label ignoreLabel] Nothing,
+					
+					Inst "swp" [] Nothing,
+					Inst "ldc" [Val "2"] Nothing,
+					Inst "sub" [] Nothing,
+					
+					// Swap values with HP, and store reference on stack
+					Inst "lds" [Val "0"] Nothing,
+					Inst "swpr" [Register HP] Nothing,
+					Inst "sta" [Val "0"] Nothing,
+					
+					Inst "bra" [Label endLabel] Nothing,
+					Inst "swp" [] (Just ignoreLabel),
+					Inst "ajs" [Val "-1"] Nothing,
+					
+					// Common return, check if next != 0 and if so, loop
+					Inst "lds" [Val "0"] (Just endLabel),
+					Inst "brt" [Label loopLabel] Nothing,
+					Inst "ajs" [Val "-1"] Nothing
+				]
 		
 /**
 	Code generator implementation
@@ -420,12 +555,17 @@ where
 			4. Generate code for the rest of the functions.
 		**/
 		let
+			bootstrap = registerInstructions [
+					Inst "ldr" [Register HP] Nothing,
+					Inst "str" [Register BP] Nothing
+				]	
+		
 			variables = filter isVarDecl ast
 			functions = filter (not o isVarDecl) ast
 			
 			// Monad performing all variable initialisations.
 			variableCode = sequence_ (
-					map (\(Var dec=:(VarDecl _ name _ _)). generateCode dec >>| registerGlobalVariable name) (variables)
+					map (\(Var dec=:(VarDecl _ name _ _)). generateCode dec >>| registerGlobalVariable name) (reverse variables)
 				)
 			
 			// Monad creating all function code.
@@ -445,8 +585,8 @@ where
 					Inst "halt" [] (Just "_globals")
 				]
 			
-		in		
-				variableCode 	
+		in		bootstrap
+			>>|	variableCode 	
 			>>|	mainCall
 			>>|	programEnd
 			>>|	functionCode
@@ -531,6 +671,14 @@ where
 					map generateCode stmts
 				)
 			
+			// Free all local variables in reverse order
+			(TS _ fType) = fromJust metadata.typeScheme
+			(FuncType argTypes _) = fType
+			
+			freeCode = sequence_ (
+					map (free) (reverse argTypes)
+				)
+			
 			// Monad to clean up afterwards
 			cleanUp = registerInstructions [
 					// Move MP to SP, so we point to the return address
@@ -552,6 +700,7 @@ where
 				>>| inFunction name (
 						stmtCode
 					)
+				>>| freeCode
 				>>| cleanUp
 			)			
 		where
@@ -816,14 +965,15 @@ where
 			2. Store address in stack frame.
 		**/
 	generateCode (ExpEmptyArray metadata) =
-			registerInstructions [
-				// Register two empty values.
-				Inst "ldc" [Val "0"] Nothing,
-				Inst "ldc" [Val "0"] Nothing,
-				// Push both values to the stack.
-				Inst "stmh" [Val "2"] Nothing
-			]
-			
+			allocate (
+				registerInstructions [
+					// Register two empty values.
+					Inst "ldc" [Val "0"] Nothing,
+					Inst "ldc" [Val "0"] Nothing
+					// Push both values to the stack.
+					//Inst "stmh" [Val "2"] Nothing
+				]
+			)			
 			
 		/**
 			1. Generate code for expr_a and store result in heap.
@@ -832,12 +982,14 @@ where
 		**/
 	generateCode (ExpTuple expr_a expr_b metadata) =
 			// Reverse order! b is on x-1 and a on x!
-			generateCode expr_b >>|
-			generateCode expr_a >>|
-			registerInstructions [
-				// Push both items to the heap.
-				Inst "stmh" [Val "2"] Nothing
-			]
+			allocate (
+				generateCode expr_b >>|
+				generateCode expr_a >>|
+				registerInstructions [
+					// Push both items to the heap.
+					//Inst "stmh" [Val "2"] Nothing
+				]
+			)
 		
 instance generateCode FunCall
 where generateCode (FunCall id exprs metadata) =
@@ -912,11 +1064,15 @@ where generateCodeBin operator aType bType =
 			3. Generate code for operator.
 		**/
 		case operator of
+			// TODO:
+			// Concat needs to shuffle its arguments around to work with the counting
 			(OpConcat) 	= validateKnownTypeShallow bType
-					  >>| registerInstructions [
-							Inst "swp" [] Nothing,
-							Inst "stmh" [Val "2"] Nothing
-						]
+					  >>| allocate (
+						  	registerInstructions [
+								Inst "swp" [] Nothing,
+								Inst "stmh" [Val "3"] Nothing
+							]
+						)
 			(OpEquals) 	= validateKnownType aType
 					  >>| validateKnownType bType
 					  >>| generateEquivalence aType

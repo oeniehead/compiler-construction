@@ -1,6 +1,6 @@
 # Use python 3.x
 import os
-import subprocess
+from subprocess import *
 import sys
 
 example_dir = 'examples_parsing'
@@ -21,16 +21,23 @@ for path in testFiles:
         "======" + path + "======\n",
         prog
         ])
-
-    print("Press a key")
     
+    proc = Popen(['spl.exe', path],
+                         universal_newlines=True,
+                         stdin=PIPE, stdout=PIPE, stderr=PIPE,
+                         bufsize=0)
     try:
-        result = subprocess.check_output(['spl.exe', path]).decode('utf-8')
-        outputs.extend(["AST:",result])
-    except subprocess.CalledProcessError as e:
-        print('Exception in ' + path + ':')
-        print((e.output).decode('utf-8'))
-        outputs.extend(["exception!\n", (e.output).decode('utf-8')])
+        outs, errs = proc.communicate("\n", timeout = 5)
+    except TimeoutExpired:
+        print("Timeout in " + path)
+        outputs.append("Timeout!")
+        proc.kill()
+        outs, errs = proc.communicate()
+
+    if(outs != ""):
+        outputs.extend(["Program outputs:", outs])
+    if(errs != ""):
+        outputs.extend(["Program errors:", errs])    
 
 with open('test_output_parsing.log', 'wb') as f:
     joinedOutputs = (os.linesep).join(outputs)

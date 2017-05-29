@@ -1,7 +1,5 @@
 implementation module CodeGenerator
 
-import SPLParser
-
 import Data.Functor
 import Control.Applicative
 import Control.Monad

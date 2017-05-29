@@ -3,7 +3,7 @@ import os
 import subprocess
 import sys
 
-example_dir = 'examples_typing'
+example_dir = 'examples_parsing'
 
 outputs = []
 
@@ -18,20 +18,20 @@ for path in testFiles:
         prog = f.read()
 
     outputs.extend([
-        "======" + path + "======",
+        "======" + path + "======\n",
         prog
         ])
 
     print("Press a key")
     
     try:
-        compiled = subprocess.check_output(['spl.exe', path]).decode('utf-8')
-        outputs.append(compiled)
+        result = subprocess.check_output(['spl.exe', path]).decode('utf-8')
+        outputs.extend(["AST:",result])
     except subprocess.CalledProcessError as e:
         print('Exception in ' + path + ':')
         print((e.output).decode('utf-8'))
-        outputs.extend(["exception!", (e.output).decode('utf-8')])
+        outputs.extend(["exception!\n", (e.output).decode('utf-8')])
 
-with open('test_output_typing.log', 'w') as f:
-    outputs = '\n'.join(outputs)
-    f.write(outputs)
+with open('test_output_parsing.log', 'wb') as f:
+    joinedOutputs = (os.linesep).join(outputs)
+    f.write(joinedOutputs.encode())

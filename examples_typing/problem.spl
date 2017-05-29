@@ -1,0 +1,8 @@
+var a = [];
+
+main ()
+{
+	var b = a;
+	
+	return b;
+}

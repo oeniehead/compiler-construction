@@ -87,7 +87,7 @@ runScanner initStr (Scanner scan)
 	, log		= []
 	}
 # (a, st) = scan startState
-= (a, st.log)
+= (a, reverse st.log)
 
 
 //Start = runScanner "c" read//Just c

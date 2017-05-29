@@ -1,4 +1,4 @@
-implementation module MainTyping
+implementation module MainParsing
 
 import System.CommandLine
 import System.IO
@@ -16,7 +16,7 @@ import Error
 import Misc
 import PrettyPrinter
 import Data.Either
-import TypeChecker
+import Parser
 
 getCl :: IO [String]
 getCl = IO getCommandLine
@@ -28,22 +28,20 @@ main :: IO ()
 main =
 	getArgs										>>= \args.
 	let file = hd args in
-	//print ("File: " +++ file)					>>|
+	print ("File: " +++ file)					>>|
 	readFileM file								>>= \string.
 	//print ("contents: \"" +++ string +++ "\"")	>>|
 	case compile string of
-		Left msg		 = withWorld \w.
-			((), snd (fclose (stderr <<< msg) w) )
+		Left msg		 = print msg/*withWorld \w.
+			((), snd (fclose (stderr <<< msg) w) )*/
 		Right (ast, log) =
 			print ((prettyPrint ast) +++ (errorsToString log))
 where
 	compile :: String -> Either String (AST, [Error])
-	compile prog = uptoTypeInference
+	compile prog = uptoParse
 				prog
 				(const Nothing)
 				(\pErrors -> "Scan/parse errors:\n"	+++ (errorsToString pErrors))
-				(\bErrors -> "Binding errors:\n"	+++ (errorsToString bErrors))
-				(\tErrors -> "Typing errors:\n"		+++ (errorsToString tErrors))
 
 
 Start w = execIO main w

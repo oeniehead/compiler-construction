@@ -1,0 +1,14 @@
+deducting_a_minus_id() :: -> Int
+{
+    return 1;
+}
+
+doing_just_a_funCall() :: -> Void
+{
+    print(4 - -deducting_a_minus_id);
+}
+
+main() :: -> Int
+{
+    doing_just_a_funCall();
+}

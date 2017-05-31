@@ -13,7 +13,6 @@ import Misc
 :: Scanner a = Scanner (ScannerState -> (a, ScannerState))
 :: ScannerState =	{ buffer	:: String
 					, sPos		:: Position
-//					, tokens	:: [Token] 
 					, log		:: [Error]}
 
 

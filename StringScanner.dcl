@@ -15,7 +15,6 @@ read	:: Scanner (Maybe Char)		// Read a character
 peek	:: Scanner (Maybe Char)		// Read a character without consuming it
 getPos  :: Scanner Position			// Get the current position
 
-//produce	:: Token	-> Scanner ()		// Produce a token //not needed
 log		:: Position Severity String	-> Scanner ()	// Log an error
 logHere :: 			Severity String	-> Scanner ()	// Log at the current position
 

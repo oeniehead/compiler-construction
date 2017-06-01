@@ -462,6 +462,7 @@ inferenceEnv ast = mRun (matchN ast >>| getEnv)
 typeInference :: AST -> ((Maybe AST), [Error])
 typeInference ast
 # (maybeRes, log) = mRun (matchN ast)
+| any (\e -> isMember e.severity [FATAL, ERROR]) log = (Nothing, log)
 =	(case maybeRes of
 		Nothing				= Nothing
 		Just (subst, ast`)	= Just (mapSubst subst ast`)

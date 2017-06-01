@@ -30,8 +30,10 @@ makeError :: Position Severity Stage String -> Error
 	| CodeGeneration 
 	// etc.
 
-derive gString Stage, Severity
+derive gEq		Stage, Severity
+derive gString	Stage, Severity
 
+instance ==		Stage, Severity
 instance toString Error, Stage, Severity
 
 errorsToString errors :== printAllnl errors 

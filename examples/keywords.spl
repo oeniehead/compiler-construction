@@ -1,0 +1,10 @@
+while(b) :: Bool -> Bool
+{
+	return b;
+}
+
+main(){
+	var if = True;
+	var x = while(if);
+}
+

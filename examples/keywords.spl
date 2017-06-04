@@ -1,0 +1,9 @@
+while(return) :: Bool -> Bool
+{	return return;	}
+
+main(){
+	Int Int = 0;
+	var if = True;
+	var var = while(if);
+	return;
+}

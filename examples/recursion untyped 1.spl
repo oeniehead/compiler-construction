@@ -1,0 +1,17 @@
+
+var p = []; // Type [Bool]
+
+f(a,b,c){ // type: A.a: a Bool [Bool] -> a
+	Int x = 0;
+	Bool y = False;
+	if(b){
+		x = f(10,False,[]);//Hier weet je het type van f nog niet goed genoeg!
+//		print(x);
+		y = f(10,False,p);//Dit zou fout moeten gaan!
+//		y = f(False,False,[]); //Dit hebben we besloten om  fout te laten gaan		
+		c = True : [];
+	} else {
+		return a;
+	}
+}
+

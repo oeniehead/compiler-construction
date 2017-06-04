@@ -289,7 +289,7 @@ where
 :: MState = { counter	:: Int
 			, errors	:: [Error]
 			, env		:: Env
-			, subst		:: Subst
+//			, subst		:: Subst
 			, label		:: String //labeling for local variables
 			, pos		:: Position
 			}
@@ -316,14 +316,17 @@ logEnv =
 getEnv :: MMonad Env
 getEnv = M \st.(Just st.env,st)
 
+setEnv :: Env -> MMonad Env
+setEnv env = M \st.(Just env,{st & env = env})
+
 changeEnv :: (Env -> Env) -> MMonad Env
 changeEnv f = M \st.(Just (f st.env),{st & env = f st.env})
 
-getSubst :: MMonad Subst
-getSubst = M \st.(Just st.subst, st)
+//getSubst :: MMonad Subst
+//getSubst = M \st.(Just st.subst, st)
 
-addSubst :: Subst -> MMonad Subst
-addSubst s = M \st.let s` = s O st.subst in (Just s`, {st & subst = s`})
+//addSubst :: Subst -> MMonad Subst
+//addSubst s = M \st.let s` = s O st.subst in (Just s`, {st & subst = s`})
 
 setLabel :: String -> MMonad String
 setLabel s = M \st.(Just s,{st & label = s})
@@ -345,7 +348,7 @@ try (M ma) (M me) = M \st.
 
 mRun :: (MMonad a) -> (Maybe a, [Error])
 mRun (M ma) =
-	let (maybeA, st) = ma {counter = 0, errors = [], label = "", env = newEnv, subst = idSubst, pos = zero}
+	let (maybeA, st) = ma {counter = 0, errors = [], label = "", env = newEnv, /*subst = idSubst,*/ pos = zero}
 	in (maybeA, reverse st.errors)
 
 //derived combinators
@@ -353,12 +356,15 @@ mUnify :: Type Type -> MMonad Subst // calculate the unification, immediately ap
 mUnify t1 t2 = case unify t1 t2 of
 	Just subst	=
 			changeEnv (\env. env ^^ subst)	>>|
-			addSubst subst
+			return subst//addSubst subst
 	Nothing		= error ("Cannot unify " <++ t1 <++ " and " <++ t2) >>| fail
 
 scope :: String (MMonad a) -> MMonad a
 scope s ma =
-	setLabel s >>| ma >>= \a.setLabel "" >>| return a
+	setLabel s	>>|
+	try
+		(ma >>= \a.setLabel "" >>| return a)
+		(setLabel "" >>| fail)
 
 suffixedName label name = case label of
 	""	= name
@@ -462,6 +468,7 @@ inferenceEnv ast = mRun (matchN ast >>| getEnv)
 typeInference :: AST -> ((Maybe AST), [Error])
 typeInference ast
 # (maybeRes, log) = mRun (matchN ast)
+| any (\e -> isMember e.severity [FATAL, ERROR]) log = (Nothing, log)
 =	(case maybeRes of
 		Nothing				= Nothing
 		Just (subst, ast`)	= Just (mapSubst subst ast`)
@@ -495,23 +502,28 @@ instance matchN AST where
 		addFuncType "read"		(TS (singleton "a") (FuncType [] 							(IdentType "a")))	>>|
 		addFuncType "isEmpty"	(TS (singleton "a") (FuncType [ArrayType (IdentType "a")]	bBoolType))		>>|
 		addFuncType "main"		(TS newSet			(FuncType [] 							VoidType))		>>|
+		debug (prettyPrint ast) >>|
 		matchAllN ast
 
 instance matchN Decl where
 	matchN d = case d of
 		Var v =
+			getEnv	>>= \env.
 			try
 				(matchN v >>= \(s, v`). return (s, Var v`))
 				(
+					setEnv env			>>|
 					let (VarDecl _ name _ _) = v in
 					makeFreshIdentType	>>= \a.
 					addVarType name a	>>|
 					return (idSubst, Var v)
 				)
 		Fun f =
+			getEnv	>>= \env.
 			try
 				(matchN f >>= \(s, f`). return (s, Fun f`))
 				(
+					setEnv env						>>|
 					let (FunDecl name args _ _ _ _) = f in
 					forM args (\_ -> makeFreshVar)	>>= \argTypes.
 					makeFreshVar					>>= \a.
@@ -526,7 +538,6 @@ instance matchN VarDecl where
 	matchN v=:(VarDecl Nothing name e m) =
 		setPos m.MetaData.pos						>>|
 		makeFreshIdentType							>>= \type.
-		//debug zero ("Fresh type " +++ (prettyPrint type) +++ " for " +++ (prettyPrint v)) >>|
 		match e type								>>= \(subst, e`).
 		addVarType name (type ^^ subst)				>>|
 		return (subst, VarDecl Nothing name e` $ setMetaType m type)
@@ -540,9 +551,7 @@ instance matchN VarDecl where
 			)
 			(	error ("Specified type '" <++ specifiedType
 					<++"' conflicts with derived type '" <++ derivedType <++ "'(specified type may be too general)") >>|
-				makeFreshIdentType							>>= \fresh. // Continue type checking with fresh variable
-				addVarType name fresh						>>|
-			 	return (subst, VarDecl (Just specifiedType) name` e` m`)
+				fail //Is caught in matchN instance for Decl
 			)
 
 	/*
@@ -571,7 +580,7 @@ instance matchN VarDecl where
 		gevallen hetzelfde te laten werken
 	*/
 
-returnVar	:== "%return"
+returnVar	:== "%return"//todo: weghalen of laten staan?
 noInfoType	:== IdentType "%noInfo"
 
 instance matchN FunDecl where
@@ -588,14 +597,14 @@ instance matchN FunDecl where
 													>>= \(subst, FunDecl fname` args` n` varDecls` stmts` m`).
 		getFuncType fname							>>= \derivedTS=:(TS _ derivedType).
 		if (specifiedType instanceOf derivedType)
-			(addFuncType fname 
-				(TS (freeVars specifiedType) specifiedType) >>|
-			return (subst, FunDecl fname` args` n` varDecls` stmts` $ setMetaTS m` (TS (freeVars specifiedType) specifiedType)))
-			(error ("Specified type '" <++ specifiedType
+			(
+				addFuncType fname (TS (freeVars specifiedType) specifiedType) >>|
+				return (subst, FunDecl fname` args` n` varDecls` stmts` $ setMetaTS m` (TS (freeVars specifiedType) specifiedType))
+			)
+			(
+				error ("Specified type '" <++ specifiedType
 					<++"' conflicts with derived type '" <++ derivedTS <++ "'(specified type may be too general)") >>|
-			addFuncType fname 
-				(TS (freeVars freshFuncType) freshFuncType) >>|
-			return (subst, FunDecl fname` args` n` varDecls` stmts` $ setMetaTS m` (TS (freeVars specifiedType) specifiedType))
+				fail//Is caught in matchN instance for Decl
 			)
 
 // Arguments:
@@ -616,7 +625,6 @@ matchFunDecl (FunDecl fname args declaredType varDecls stmts m) fInstanceTS (Fun
 	)					>>= \(subst, vs`, ss`).
 	let argTypes` = map (\t.t ^^ subst) argTypes in
 	getVarType (returnVar +++ "@" +++ fname)	>>= \returnVarType.
-	//debug zero ("Final type of " +++ returnVar +++ "@" +++ fname +++ ": " +++ (prettyPrint returnVarType)) >>|
 	let
 		returnType =
 			case returnVarType of
@@ -628,11 +636,6 @@ matchFunDecl (FunDecl fname args declaredType varDecls stmts m) fInstanceTS (Fun
 							(freeVars env)
 						) funcType
 	in
-	/*debug zero ("Final return type of " +++ fname +++ ": " +++ (case returnType of
-					Nothing = "Void"
-					Just type = prettyPrint type)) >>|*/
-	//debug zero ("Free variables in env:" +++ (( printAllnl o toList o freeVars) env)) >>|
-	//debug zero ("Free variables in " +++ (toString funcType) +++ ":" +++ (( printAllnl o toList o freeVars) funcType)) >>|
 	addFuncType fname typeScheme >>|
 	return (subst, FunDecl fname args declaredType vs` ss` $ setMetaTS m typeScheme)
 
@@ -660,7 +663,6 @@ instance matchN Stmt where
 				return (s2 O s1, StmtAss iwf` e` m)
 			StmtFunCall funCall	m =
 				makeFreshIdentType			>>= \a.
-				//debug zero ("Fresh type " +++ (prettyPrint a) +++ " for " +++ (prettyPrint stmt)) >>|
 				match funCall a				>>= \(subst, funCall`).
 				return (subst, StmtFunCall funCall` m) 
 			StmtRet e			m =
@@ -758,11 +760,8 @@ instance match FunCall where
 	match (FunCall name args m) t =
 		setPos m.MetaData.pos								>>|
 		getFuncType name									>>= \(TS boundedTypes fType).
-		//debug zero ("Retrieved type of " +++ name +++ ": " +++ (toString (TS boundedTypes fType))) >>|
 		makeInstanceFuncType (toList boundedTypes) fType	>>= \(FuncType argTypes rType).
-		//debug zero ("Generated instance function type: " +++ (prettyPrint (FuncType argTypes rType))) >>|
 		matchAll (zip2 args argTypes)						>>= \(subst, args`).
-		//debug zero ("Unified   instance function type: " +++ (toString (TS boundedTypes fType))) >>|
 		mUnify (t ^^ subst) (rType ^^ subst)				>>= \s1.
 		return (s1 O subst, FunCall name args` $ setMetaType m t)
 // twee doelen:

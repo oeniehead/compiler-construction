@@ -12,7 +12,18 @@ import StdDebug
 
 import Data.Either
 
-derive gString OrderItem, Error, Signature
+:: BAMonad a = BD (BAMonadState -> (Maybe a, BAMonadState))
+:: BAMonadState = {
+	,	globalVariables :: [String] // Global variables
+	,	localVariables 	:: [String]	// Local variables	
+	,	errors			:: [Error]	// To keep track of errors
+	}
+
+error :: Error -> CGMonad ()
+error e = CG \st. (Nothing, { st & errors = [e : st.errors]})
+
+
+/*derive gString OrderItem, Error, Signature
 derive gEq OrderItem
 instance toString OrderItem where toString x = gString{|*|} x
 instance toString OrderGraph where toString x = gString{|*|} x
@@ -53,7 +64,7 @@ uptoBinding prog fscanErrors fparseErrors fbindingErrors =
 			let result = doBindingAnalysis ast
 			in case result of
 				Left errors = Left $ fbindingErrors (parseErrors ++ errors)
-				Right ast = Right (ast, parseErrors)
+				Right ast = Right (ast, parseErrors ++ errors)
 
 
 doAnalysis :: OrderGraph AST -> OrderGraph
@@ -442,7 +453,7 @@ doBindingAnalysis ast =
 			errors = (Left errors)
 		(_, _, errors) = (Left errors)
 
-
+*/
 
 
 

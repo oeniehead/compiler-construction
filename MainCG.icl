@@ -36,8 +36,8 @@ main =
 	case compile string of
 		Left msg		 = print msg
 		Right (instructions, log) =
-			print instructions >>|
-			print log
+			print instructions //>>|
+			//print log
 where
 	compile :: String -> Either String (String, String)
 	compile prog = uptoCodeGeneration

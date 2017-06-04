@@ -1,5 +1,0 @@
-// A function body cannot be empty. This should fail.
-main ()
-{
-}
-

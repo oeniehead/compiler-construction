@@ -7,8 +7,11 @@ import CustomStdEnv
 makeError :: Position Severity Stage String -> Error
 makeError p sev stage msg = {pos=p, severity=sev, stage=stage, message=msg}
 
+derive gEq Stage, Severity
 derive gString Stage, Severity
 
+instance == Stage		where (==) a b = gEq{|*|} a b
+instance == Severity	where (==) a b = gEq{|*|} a b
 instance toString Error		where
 	toString {pos={line,col}, severity, stage, message}
 	= concat [ toString severity

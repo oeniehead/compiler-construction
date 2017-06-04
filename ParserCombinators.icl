@@ -8,6 +8,7 @@ import Data.Either
 import Data.Func
 import Data.Functor
 import Data.List
+from Data.Tuple import appSnd
 from StdFunc import o, const
 import Error
 
@@ -79,7 +80,7 @@ parse p ts
       (_, es)  -> Left es
 
 runParser :: (Parser t a) [t] -> ([(a, [t])], [Error])
-runParser (Parser f) xs = f xs
+runParser (Parser f) xs = appSnd reverse (f xs)
 
 // -- Core combinators
 pFail :: Parser t a

@@ -11,7 +11,7 @@ import StdGeneric
 import CustomStdEnv
 
 import Scanner
-import SPLParser
+
 import Error
 import Misc
 import PrettyPrinter
@@ -36,9 +36,10 @@ main =
 	case compile string of
 		Left msg		 = print msg
 		Right (instructions, log) =
-			print instructions
+			print instructions //>>|
+			//print log
 where
-	compile :: String -> Either String (String, [Error])
+	compile :: String -> Either String (String, String)
 	compile prog = uptoCodeGeneration
 				prog
 				(const Nothing)

@@ -1,4 +1,4 @@
-implementation module MainTyping
+implementation module MainParsing
 
 import System.CommandLine
 import System.IO
@@ -16,7 +16,7 @@ import Error
 import Misc
 import PrettyPrinter
 import Data.Either
-import TypeChecker
+import Parser
 
 getCl :: IO [String]
 getCl = IO getCommandLine
@@ -37,12 +37,10 @@ main =
 			print ("AST:\n" +++ (prettyPrint ast) +++ (errorsToString log))
 where
 	compile :: String -> Either String (AST, [Error])
-	compile prog = uptoTypeInference
+	compile prog = uptoParse
 				prog
 				(const Nothing)
 				(\pErrors -> errorsToString pErrors)
-				(\bErrors -> errorsToString bErrors)
-				(\tErrors -> errorsToString tErrors)
 
 
 Start w = execIO main w

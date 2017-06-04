@@ -1,7 +1,7 @@
 definition module TypeChecker
 
 import Spec
-import SPLParser
+import Parser
 from Data.Maybe import :: Maybe
 from Error import :: Error
 

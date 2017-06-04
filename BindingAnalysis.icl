@@ -1,6 +1,7 @@
 implementation module BindingAnalysis
 
-import SPLParser
+import AST
+from Parser import uptoParse
 
 import StdGeneric
 import GenString
@@ -341,7 +342,7 @@ compareReturns pos a b res
 	
 doUnusedAnalysis :: OrderGraph -> [Error]
 doUnusedAnalysis ([], signatures, errors) = []
-doUnusedAnalysis ([(a, b): relations], signatures, errors) =
+doUnusedAnalysis g=:([(a, b): relations], signatures, errors) = [] /*
 	let pos = case b of
 				(VarItem _ p) = p
 				(CallsItem _ _ _ p) = p
@@ -349,13 +350,13 @@ doUnusedAnalysis ([(a, b): relations], signatures, errors) =
 				(VarItem name _) = "Variable " +++ name
 				(CallsItem name args returns _) = "Function(" +++ (toString args) +++ ")(" +++ toString returns +++ ") " +++ name
 		next = doUnusedAnalysis (relations, signatures, errors)
-		in if (itemExists b signatures)
+	in if (itemExists b signatures)
 					(next) ([{Error |
 							pos = pos,
 							severity = FATAL,
 							stage = Binding,
 							message = name +++ " is not defined."
-						} : next]) 
+						} : next]) */
 		
 itemExists :: OrderItem [Signature] -> Bool
 itemExists inp=:(VarItem name _) [] 				= False

@@ -13,7 +13,7 @@ uptoCodeGeneration ::
 	([Error] -> a)
 	([Error] -> a)
 	([Error] -> a)
-		-> Either a (String, [Error])
+		-> Either a (String, a)
 		
 instance toString CGArg
 instance toString CGInst

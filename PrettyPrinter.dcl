@@ -1,6 +1,6 @@
 definition module PrettyPrinter
 
-import SPLParser
+import AST
 from Indentation import :: Show
 
 prettyPrint :: a -> String | toShow a

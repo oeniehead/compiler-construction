@@ -6,4 +6,4 @@ import test
 
 test.runTest(excluded     = test.expectParseError,
              expectToFail = test.expectBindingError,
-             outFile      = 'test_binding.log')
+             outFile      = 'testBinding.log')

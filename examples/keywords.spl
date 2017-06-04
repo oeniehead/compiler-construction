@@ -1,10 +1,9 @@
-while(b) :: Bool -> Bool
-{
-	return b;
-}
+while(return) :: Bool -> Bool
+{	return return;	}
 
 main(){
+	Int Int = 0;
 	var if = True;
-	var x = while(if);
+	var var = while(if);
+	return;
 }
-

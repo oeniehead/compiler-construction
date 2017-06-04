@@ -6,4 +6,4 @@ import test
 
 test.runTest(excluded     = test.expectParseError + test.expectBindingError,
              expectToFail = test.expectTypeError,
-             outFile      = 'test_Typeinference.log')
+             outFile      = 'testTypeInference.log')

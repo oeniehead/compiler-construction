@@ -6,4 +6,4 @@ import test
 
 test.runTest(excluded     = test.expectParseError + test.expectBindingError + test.expectTypeError,
              expectToFail = test.exceptCGError,
-             outFile      = 'test_CG.log')
+             outFile      = 'testCG.log')

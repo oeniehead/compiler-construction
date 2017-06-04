@@ -1,6 +1,7 @@
 # Use python 3.x
 import os
 from subprocess import *
+import sys
 
 TIMEOUT = -1
 FAIL = 0
@@ -21,7 +22,8 @@ expectBindingError = [
     'Example.spl',
     'fundecl.spl',
     'problematic.spl',
-	'stress.spl'
+	'stress.spl',
+	'SumProduct.spl'
     ]
 
 expectTypeError = [
@@ -38,7 +40,8 @@ exceptCGError = [
     ]
 
 
-def test(testSpecs, outFile, timeout=5):
+def test(testSpecs, outFile, timeout, logSucceededTests):
+    print("timeout: " + str(timeout))
     succeededTests = []
     failedTests = []
     
@@ -73,6 +76,9 @@ def test(testSpecs, outFile, timeout=5):
         else:
             failedTests.append(testResult)
 
+    print(str(len(succeededTests)) + " tests succeeded, " + str(len(failedTests)) + " tests failed")
+    
+    failedTests = sorted(failedTests, key=lambda t: t.succeeded, reverse=True)
     outputs = []
 
     outputs.append("============== failed tests ==============")
@@ -85,20 +91,23 @@ def test(testSpecs, outFile, timeout=5):
         if(r.outs != ""): outputs.extend(["Program outputs:", r.outs])
         if(r.errs != ""): outputs.extend(["Program errors:", r.errs])
 
-    outputs.append("============== succeeded tests ==============")
-    for r in succeededTests:
-        outputs.extend([
-            "======" + r.file + "======",
-            r.prog
-            ])
-        if(r.outs != ""): outputs.extend(["Program outputs:", r.outs])
-        if(r.errs != ""): outputs.extend(["Program errors:", r.errs])
+    if logSucceededTests:
+        outputs.append("============== succeeded tests ==============")
+        for r in succeededTests:
+            outputs.extend([
+                "======" + r.file + "======",
+                r.prog
+                ])
+            if(r.outs != ""): outputs.extend(["Program outputs:", r.outs])
+            if(r.errs != ""): outputs.extend(["Program errors:", r.errs])
     
     with open(outFile, 'wb') as f:
         joinedOutputs = (os.linesep).join(outputs)
         f.write(joinedOutputs.encode())
 
-def runTest(excluded, expectToFail, outFile ,timeout=5):
+def runTest(excluded, expectToFail, outFile):
+    logSucceededTests = sys.argv[2] in ['True', 'true', 't', '1'] if len(sys.argv) > 2 else True
+    timeout           = int(sys.argv[1]) if len(sys.argv) > 1 else 5
     testSpecs = [(os.path.join(example_dir, file), FAIL if file in expectToFail else SUCCESS)
                  for file in os.listdir(example_dir) if file not in excluded]
-    test(testSpecs, outFile, timeout)
+    test(testSpecs, outFile, timeout, logSucceededTests)

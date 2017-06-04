@@ -6,4 +6,4 @@ import test
 
 test.runTest(excluded     = [],
              expectToFail = test.expectParseError,
-             outFile      = 'test_parse.log')
+             outFile      = 'testParse.log')

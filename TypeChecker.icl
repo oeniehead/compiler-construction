@@ -502,7 +502,6 @@ instance matchN AST where
 		addFuncType "read"		(TS (singleton "a") (FuncType [] 							(IdentType "a")))	>>|
 		addFuncType "isEmpty"	(TS (singleton "a") (FuncType [ArrayType (IdentType "a")]	bBoolType))		>>|
 		addFuncType "main"		(TS newSet			(FuncType [] 							VoidType))		>>|
-		debug (prettyPrint ast) >>|
 		matchAllN ast
 
 instance matchN Decl where

@@ -29,6 +29,7 @@ pFail		:: Parser t a
 pYield		:: a -> Parser t a
 pSatisfy	:: (t -> Bool) -> Parser t t
 pError		:: Error -> Parser t a
+pLog		:: Error -> Parser t ()
 pGetPos		:: Parser Token Position
 
 // Derived convenience parsers
@@ -40,7 +41,6 @@ pGetPos		:: Parser Token Position
 (<|>>) infixr 4 :: (Parser t a) (Parser t a) -> Parser t a
 
 (<:>) infixr 6 :: (Parser s r) (Parser s [r]) -> Parser s [r]
-try			:: (Parser t a) (Parser t a) -> Parser t a
 
 pMany     :: (Parser s r) -> Parser s [r]
 pSome     :: (Parser s r) -> Parser s [r]

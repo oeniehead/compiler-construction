@@ -22,4 +22,9 @@ parser :: [Token] -> (Maybe (Bool, AST), [Error])
  * Returns				: (Left a) with the specified a if failed
  *						  (Right (ast,log)) if succeeded, with the log of the scanner
  */
-uptoParse :: String ([Error] -> Maybe a) ([Error] -> a) ([Error] -> Maybe a) -> Either a (AST,[Error])
+uptoParse ::
+	String
+	([Error] -> Maybe a)
+	([Error] -> a)
+	([Error] -> Maybe a)
+		-> Either a (AST,[Error])

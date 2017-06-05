@@ -41,6 +41,7 @@ where
 				prog
 				(const Nothing)
 				(\pErrors -> errorsToString pErrors)
+				(\pErrors -> Just (errorsToString pErrors))
 
 
 Start w = execIO main w

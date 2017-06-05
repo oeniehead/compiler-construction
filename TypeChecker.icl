@@ -484,16 +484,17 @@ uptoTypeInference ::
 	String
 	([Error] -> Maybe a)
 	([Error] -> a)
+	([Error] -> Maybe a)
 	([Error] -> a)
 	([Error] -> a)
 		-> Either a (AST, [Error])
-uptoTypeInference prog fscanErrors fparseErrors fbindingErrors ftypeErrors =
-	case uptoBinding prog fscanErrors fparseErrors fbindingErrors of//uptoBinding uptoParse
+uptoTypeInference prog fscanErrors fparseFail fparseErrors fbindingErrors ftypeErrors =
+	case uptoBinding prog fscanErrors fparseFail fparseErrors fbindingErrors of//uptoBinding uptoParse
 		Left a	= Left a
 		Right (ast, bindingErrors) =
 			let (mAST, typeErrors) = typeInference ast
 			in case mAST of
-				Nothing  = Left $ fparseErrors (bindingErrors ++ typeErrors)
+				Nothing  = Left $ ftypeErrors (bindingErrors ++ typeErrors)
 				Just ast = Right (ast, bindingErrors ++ typeErrors)
 
 instance matchN AST where
@@ -502,7 +503,6 @@ instance matchN AST where
 		addFuncType "read"		(TS (singleton "a") (FuncType [] 							(IdentType "a")))	>>|
 		addFuncType "isEmpty"	(TS (singleton "a") (FuncType [ArrayType (IdentType "a")]	bBoolType))		>>|
 		addFuncType "main"		(TS newSet			(FuncType [] 							VoidType))		>>|
-		debug (prettyPrint ast) >>|
 		matchAllN ast
 
 instance matchN Decl where
@@ -820,8 +820,9 @@ checkProg prog vartypes funtypes =
 	case 'Scanner'.scanner prog of
 		(_,[e:es])	= thisFailed ("Scan error: \n" +++ (errorsToString [e:es]))
 		(tokens,[])	= case parser tokens of
-			Left es		= thisFailed ("Parse error: \n" +++ (errorsToString es))
-			Right ast	= case inferenceEnv ast of
+			(Nothing, es)			= thisFailed ("Parse error: \n" +++ (errorsToString es))
+			(Just (False, _  ), es)	= thisFailed ("Parse error: \n" +++ (errorsToString es))
+			(Just (True , ast), es)	= case inferenceEnv ast of
 				(Just env, log)	=
 					let results = checkEnv env vartypes funtypes
 					in if (any isFailed results)

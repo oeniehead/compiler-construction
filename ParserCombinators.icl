@@ -16,10 +16,6 @@ import Misc, Token
 
 :: PCont t a :== [t] -> ([(a, [t])], [Error])
 :: Parser t a = Parser (PCont t a)
-//	:: Parser a = Parser (State -> ([(a, State)], [Error]) )
-//	:: State = { tokens		:: [Token]
-//			   , prevPos	:: Position
-//			   }
 
 // -- AMF instances
 instance Functor (Parser t) where
@@ -99,6 +95,9 @@ pSatisfy pred = Parser pSatisfy`
 pError :: Error -> Parser t a
 pError err = Parser (\_ -> ([], [err]))
 
+pLog :: Error -> Parser t ()
+pLog err = Parser (\input -> ([((),input)], [err]))
+
 pGetPos :: Parser Token Position
 pGetPos = Parser (\tokens ->
 	if (isEmpty tokens)
@@ -108,7 +107,6 @@ pGetPos = Parser (\tokens ->
 			in ([(pos,tokens)], [])
 		)
 	)
-
 
 // -- Derived convenience parsers
 (@!) infixr 4 :: (Parser t a) Error -> Parser t a

@@ -4,8 +4,8 @@ from Misc import :: Position
 import GenString
 import CustomStdEnv
 
-scanner :: String -> [Token]
-scanner _ = []
+getOriginal :: Token -> String
+getOriginal (Token _ s _) = s
 
 derive gString Token, TokenType, BraceType, BraceStyle
 derive gEq Token, TokenType, BraceType, BraceStyle

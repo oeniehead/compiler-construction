@@ -12,9 +12,9 @@ import Control.Monad
 from Data.Func import $
 import StdArray
 
-
+// Try to get the current position, return the default of zero if no position found
 withPos :: (Position -> Parser Token a) -> Parser Token a
-withPos f = (pGetPos >>= f) @! (makeError zero FATAL Parsing "Failed to determine current position")
+withPos f = (pGetPos >>= f) <<|> (f zero)
 
 withMeta :: (MetaData -> Parser Token a) -> Parser Token a // make a MetaData with current pos and no type information
 withMeta f = withPos (\p. f {pos = p, type = Nothing})
@@ -40,33 +40,86 @@ pMaybe parse = (Just <$> parse) <<|> (pYield Nothing)
 pBetweenBrackets :: BraceStyle (Parser Token a) -> Parser Token a
 pBetweenBrackets bstyle parse = pSatisfyBrace Open bstyle *> parse <* pSatisfyBrace Close bstyle
 
+// Skip all tokens not in the list
+// Skips all tokens if none of the tokens in the list have been found
+skipTill :: [TokenType] ->  Parser Token [Token]
+skipTill types = pMany ( pSatisfy \(Token t _ _) -> not (isMember t types) )
+	
+// Eats incorrect syntax up to and including a certain ending token, like '}' or ';'
+// If no ending token has been found, skips all the characters up to EOF
+// At least one token needs to be skipped. Skipping no tokens is not seen as the eating of a piece of incorrect syntax
+eatIncorrectSyntax :: [TokenType] ->  Parser Token [Token]
+eatIncorrectSyntax types =
+	(
+		skipTill types									>>= \skipped.
+		pSatisfy (\(Token t _ _) -> isMember t types)	>>= \ending.
+		return (skipped ++ [ending])
+	) <<|> (
+		skipTill [EOFToken]	>>= \skipped.
+		case skipped of
+			[]	= empty
+			_	= return skipped
+	)
 
-parser :: [Token] -> Either [Error] AST
-parser tokens = parse parseAST tokens
+// Parse an item, or skip to the token if parsing failed, and deliver Nothing
+pWithRecover :: [TokenType] (Parser Token a) -> Parser Token (Either [Token] a)
+pWithRecover types p =
+	(Right <$> p) <<|> (Left <$> (eatIncorrectSyntax types))
 
-uptoParse :: String ([Error] -> Maybe a) ([Error] -> a) -> Either a (AST,[Error])
-uptoParse prog fscanErrors fparseErrors =
+parser :: [Token] -> (Maybe (Bool, AST), [Error])
+parser tokens =
+	case runParser parseAST tokens of
+		([]		, log) = (Nothing, [makeError zero FATAL Parsing "No parse results":log])
+		(results, log) = case [r \\ (r, []) <- results] of
+			[(ok,ast): _]	= (Just (ok,ast), log)
+			_		= (Nothing, [makeError zero FATAL Parsing "No parse results with a fully consumed input":log])
+
+uptoParse :: String ([Error] -> Maybe a) ([Error] -> a) ([Error] -> Maybe a) -> Either a (AST,[Error])
+uptoParse prog fscanErrors fparseFail fParserErrors =
 	let (tokens,scanErrors) = scanner prog
 	in case fscanErrors scanErrors of
 		Just a = Left a
 		Nothing =
 			case parser tokens of
-				Left parseErrors	= Left $ fparseErrors (scanErrors ++ parseErrors)
-				Right ast			= Right (ast, scanErrors)
+				(Nothing		   , log)	= Left $ fparseFail (scanErrors ++ log)
+				(Just (True , ast) , log)	= Right (ast, scanErrors ++ log)
+				(Just (False, ast) , log)	=
+						case fParserErrors (scanErrors ++ log) of
+							Nothing		= Right (ast, scanErrors ++ log)
+							Just a		= Left a
 
-				
-parseAST :: Parser Token AST
-parseAST =	pMany parseDecl				>>= \decls.
-			pSatisfyTokenType EOFToken	>>|
-			return decls
+
+/* Parse the declarations in the input
+ * Returns:
+ *	- Bool: was the parsing totally successfull?
+ *	- AST: the declarations that could be parsed successfully
+ */
+parseAST :: Parser Token (Bool, AST)
+parseAST =
+	pMany
+		(
+			pGetPos		>>= \pos.
+			pWithRecover [TerminatorToken, Brace Close Curly] parseDecl >>= \mRes.
+			case mRes of
+				Left tokens	=
+					pLog (makeError pos ERROR Parsing (
+						"Error while parsing declaration, skipping up to and including " +++ case last tokens of
+							Token _ s p = s +++ "[" +++ (toString p.line) +++ ", " +++ (toString p.col) +++ "]"
+						)) >>|
+					return Nothing
+				Right res			=
+					return (Just res)
+		)	>>= \mdecls.
+		pSatisfyTokenType EOFToken >>|
+		return (all isJust mdecls, [ fromJust d \\ d <- mdecls | isJust d])
 
 parseDecl :: Parser Token Decl
-parseDecl = //withMeta \meta.
-	(
-		parseVarDecl >>= \v. pYield (Var v /*meta*/)
-	) <<|> (
-		parseFunDecl >>= \f. pYield (Fun f /*meta*/)
-	)
+parseDecl =
+		(
+			parseVarDecl >>= \v. pYield (Var v)
+		) <<|> (
+			parseFunDecl >>= \f. pYield (Fun f)
+		)
 
 parseVarDecl :: Parser Token VarDecl
 parseVarDecl =  withPos							\pos.
@@ -93,15 +146,14 @@ parseFunDecl = withPos												\pos.
 	return (FunDecl name args mType vardecls stmts {pos=pos, typeScheme=Nothing})
 				
 parseIds :: Parser Token [Id]
-parseIds = (
-						parseId
-					>>= \t. pMany (
-							pSatisfyTokenType Comma
-						>>| parseId)
-					>>= \l. pYield [t : l]
-				) <<|> (
-					pYield []
-				)
+parseIds =
+	(
+		parseId	>>= \t.
+		pMany (	pSatisfyTokenType Comma >>| parseId) >>= \l.
+		pYield [t : l]
+	) <<|> (
+		pYield []
+	)
 
 parseFunType :: Parser Token Type
 parseFunType =

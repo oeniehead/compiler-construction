@@ -1,18 +1,13 @@
 definition module BindingAnalysis
 
-import Error, Misc, AST
-
+import AST
+import Error
 from Data.Either import :: Either
 
 import StdGeneric
 import GenString
 
-derive gString OrderItem
-instance toString OrderItem
-instance toString (OrderItem, OrderItem)
-instance toString OrderGraph
-
-class doOrder a :: OrderGraph a -> OrderGraph
+/*class doOrder a :: OrderGraph a -> OrderGraph
 class buildGraphFrom a :: OrderItem [String] a -> OrderGraph
 
 :: OrderItem
@@ -27,9 +22,9 @@ class buildGraphFrom a :: OrderItem [String] a -> OrderGraph
 	= VarSig String
 	| FuncSig String Int Bool
 
-:: OrderGraph :== ([(OrderItem, OrderItem)], [Signature], [Error])
+:: OrderGraph :== ([(OrderItem, OrderItem)], [Signature], [Error])*/
 
-doBindingAnalysis :: AST -> Either [Error] AST
+doBindingAnalysis :: AST -> Either [Error] (AST, [Error])
 
 uptoBinding ::
 	String

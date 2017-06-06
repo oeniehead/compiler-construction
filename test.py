@@ -41,7 +41,6 @@ exceptCGError = [
 
 
 def test(testSpecs, outFile, timeout, logSucceededTests):
-    print("timeout: " + str(timeout))
     succeededTests = []
     failedTests = []
     

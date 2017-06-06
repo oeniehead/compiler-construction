@@ -59,10 +59,11 @@ uptoBinding ::
 	String
 	([Error] -> Maybe a)
 	([Error] -> a)
+	([Error] -> Maybe a)
 	([Error] -> a)
 		-> Either a (AST, [Error])
-uptoBinding prog fscanErrors fparseErrors fbindingErrors =
-	case uptoParse prog fscanErrors fparseErrors of
+uptoBinding prog fscanErrors fparseFail fparseErrors fbindingErrors =
+	case uptoParse prog fscanErrors fparseFail fparseErrors of
 		Left a	= Left a
 		Right (ast, parseErrors) =
 			let result = doBindingAnalysis ast

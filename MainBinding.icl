@@ -11,7 +11,7 @@ import StdGeneric
 import CustomStdEnv
 
 import Scanner
-import Parser
+
 import Error
 import Misc
 import PrettyPrinter
@@ -26,23 +26,22 @@ getArgs = fmap (drop 1) getCl
 
 main :: IO ()
 main =
-	//print "=========================="			>>|
 	getArgs										>>= \args.
 	let file = hd args in
 	//print ("File: " +++ file)					>>|
 	readFileM file								>>= \string.
-	//print ("contents: \"" +++ string +++ "\"")	>>|
 	case compile string of
-		Left msg		 = print msg
+		Left msg		 = withWorld \w.
+			((), snd (fclose (stderr <<< msg) w) )
 		Right (ast, log) =
-				print (prettyPrint ast)
-			>>| print (errorsToString log)
+			print ("AST:\n" +++ (prettyPrint ast) +++ (errorsToString log))
 where
 	compile :: String -> Either String (AST, [Error])
 	compile prog = uptoBinding
 				prog
 				(const Nothing)
 				(\pErrors -> errorsToString pErrors)
+				(const Nothing)
 				(\bErrors -> errorsToString bErrors)
 
 

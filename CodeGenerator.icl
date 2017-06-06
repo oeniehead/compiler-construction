@@ -124,12 +124,13 @@ uptoCodeGeneration ::
 	String
 	([Error] -> Maybe a)
 	([Error] -> a)
+	([Error] -> Maybe a)
 	([Error] -> a)
 	([Error] -> a)
 	([Error] -> a)
 		-> Either a (String, a)
-uptoCodeGeneration prog fscanErrors fparseErrors fbindingErrors ftypeErrors fcodeErrors  =
-	case uptoTypeInference prog fscanErrors fparseErrors fbindingErrors ftypeErrors of
+uptoCodeGeneration prog fscanErrors fparseFail fparseErrors fbindingErrors ftypeErrors fcodeErrors  =
+	case uptoTypeInference prog fscanErrors fparseFail fparseErrors fbindingErrors ftypeErrors of
 		Left a	= Left a
 		Right (ast, typeErrors) =
 			let (instructions, errors) = runCodeGenerator ast

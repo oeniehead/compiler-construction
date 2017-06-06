@@ -11,7 +11,6 @@ import CustomStdEnv
 	| StringToken // Starts with an alphabetic char, but can be alphanumerical or '_' from there on
 	| NumToken
 	| TerminatorToken
-	| QuoteToken
 	| Brace BraceType BraceStyle
 	| Operator  // je kunt unaire en binaire operatoren niet scheiden tijdens het parsen
 	| Dot
@@ -24,6 +23,8 @@ import CustomStdEnv
 
 :: BraceType	= Open  | Close
 :: BraceStyle	= Curly | Round | Square
+
+getOriginal :: Token -> String
 
 derive gString Token, TokenType, BraceType, BraceStyle
 

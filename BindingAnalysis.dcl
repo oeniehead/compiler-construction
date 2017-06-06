@@ -30,5 +30,6 @@ uptoBinding ::
 	String
 	([Error] -> Maybe a)
 	([Error] -> a)
+	([Error] -> Maybe a)
 	([Error] -> a)
 		-> Either a (AST, [Error])

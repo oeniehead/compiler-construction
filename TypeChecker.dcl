@@ -17,10 +17,11 @@ typeInference :: AST -> ((Maybe AST), [Error])
  */
 uptoTypeInference ::
 	String
-	([Error] -> Maybe a)
-	([Error] -> a)
-	([Error] -> a)
-	([Error] -> a)
+	([Error] -> Maybe a)	//Scanner
+	([Error] -> a)			//Parser fail
+	([Error] -> Maybe a)	//Parser recover
+	([Error] -> a)			//Binding fail
+	([Error] -> a)			//TypeChecker fail
 		-> Either a (AST, [Error])
 
 

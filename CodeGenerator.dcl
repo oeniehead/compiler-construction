@@ -10,6 +10,7 @@ uptoCodeGeneration ::
 	String
 	([Error] -> Maybe a)
 	([Error] -> a)
+	([Error] -> Maybe a)
 	([Error] -> a)
 	([Error] -> a)
 	([Error] -> a)

@@ -1,13 +1,39 @@
+var a = k();
 
-main ()
+k ()
 {
-	f();
-	
 	return 1;
 }
 
-f ()
+
+main ()
 {
-	return [];
+	return b();
+	return a;
 }
 
+b()
+{
+	return x();
+	return c();
+}
+
+c()
+{
+	return main();
+}
+
+x() 
+{
+	return y();
+}
+
+y()
+{
+	return z();
+}
+
+z()
+{
+	return x();
+}

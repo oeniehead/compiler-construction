@@ -11,12 +11,12 @@ import StdGeneric
 import CustomStdEnv
 
 import Scanner
-import SPLParser
+import Parser
 import Error
 import Misc
 import PrettyPrinter
 import Data.Either
-import TypeChecker
+import BindingAnalysis
 
 getCl :: IO [String]
 getCl = IO getCommandLine
@@ -35,7 +35,8 @@ main =
 	case compile string of
 		Left msg		 = print msg
 		Right (ast, log) =
-			print (prettyPrint ast)
+				print (prettyPrint ast)
+			>>| print (errorsToString log)
 where
 	compile :: String -> Either String (AST, [Error])
 	compile prog = uptoBinding
@@ -43,7 +44,6 @@ where
 				(const Nothing)
 				(\pErrors -> errorsToString pErrors)
 				(\bErrors -> errorsToString bErrors)
-				(\tErrors -> errorsToString tErrors)
 
 
 Start w = execIO main w

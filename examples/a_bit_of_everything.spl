@@ -44,11 +44,11 @@ facL ( n ) :: Int -> Int {
 }
 
 // Computes the product of a list of integers
-product ( list ) :: [Int] -> Int {
-    if ( isEmpty ( list ) ) {
+product ( lista ) :: [Int] -> Int {
+    if ( isEmpty ( lista ) ) {
         return 1;
     } else {
-        return list.hd * product ( list.tl );
+        return lista.hd * product ( lista.tl );
     }
 }
 
@@ -62,11 +62,11 @@ fromTo ( from, to ) :: Int Int -> [Int] {
 }
 
 // Make a reversed copy of any list
-reverse ( list ) :: [t] -> [t] {
+reverse ( listb ) :: [t] -> [t] {
     var accu = [];
-    while ( ! isEmpty ( list ) ) {
-        accu = list.hd : accu ;
-        list = list.tl;
+    while ( ! isEmpty ( listb ) ) {
+        accu = listb.hd : accu ;
+        listb = listb.tl;
     }
     return accu ;
 }

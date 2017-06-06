@@ -106,7 +106,7 @@ error :: Error -> BDMonad a
 error e = BD \st. (Nothing, { st & errors = [e : st.errors]})
 
 debug :: Error -> BDMonad ()
-debug e = return () //BD \st. (Just (), { st & errors = st.errors ++ [e]})
+debug e = return ()//BD \st. (Just (), { st & errors = st.errors ++ [e]})
 
 /*registerGlobalVariable :: String -> BDMonad ()
 registerGlobalVariable name = 
@@ -114,17 +114,24 @@ registerGlobalVariable name =
 		
 registerLocalVariable :: String -> BDMonad ()
 registerLocalVariable name = 
-	BD \st. case length (filter (\n. n == name) st.localVariables) of
-		(0) = (Just (), {st & localVariables = [name : st.localVariables]})
-		_	= (Nothing, {st & errors = st.errors ++ [
-					{
-						pos = zero,
-						severity = FATAL,
-						stage = Binding,
-						message = "Variable " +++ name +++ " is already defined"
-					}
-				]
-			})
+	debug {
+		pos = zero,
+		severity = DEBUG,
+		stage = Binding,
+		message = "Registering local variable " +++ name
+	}
+	>>| 
+		BD \st. case length (filter (\n. n == name) st.localVariables) of
+			(0) = (Just (), {st & localVariables = [name : st.localVariables]})
+			_	= (Nothing, {st & errors = st.errors ++ [
+						{
+							pos = zero,
+							severity = FATAL,
+							stage = Binding,
+							message = "Variable " +++ name +++ " is already defined"
+						}
+					]
+				})
 			
 getLocalVariables :: (BDMonad [String])
 getLocalVariables = 
@@ -230,7 +237,7 @@ forGlobalVariable name func =
 			pos = zero,
 			severity = DEBUG,
 			stage = Binding,
-			message = gString{|*|} locals
+			message = "Current locals: " +++ (gString{|*|} locals)
 		}
 	>>| 
 	BD \st.
@@ -466,13 +473,19 @@ instance process FunDecl where
 		let
 			processVariables = sequence_ (
 					map (
-						\decl=:(VarDecl _ id _ _).
-							depends (VarItem id)
-							>>| process decl
+						\(VarDecl _ name expr _).
+								registerLocalVariable name
+							>>|	forGlobalVariable name (
+								depends (VarItem name)
+							)
+							>>| process expr
 					) decls
 				)
 			
 		in	enter (FuncItem id)
+		>>| sequence_ (
+			map (registerLocalVariable) aArg
+		)
 		>>| processVariables
 		>>| process stmts
 		>>| leave
@@ -543,7 +556,9 @@ instance process Expr where
 		
 instance process FunCall where
 	process (FunCall name args _) =
-			depends (FuncItem name)
+			if (name == "isEmpty" || name == "print" || name == "read")
+			(return ())
+			(depends (FuncItem name))
 		>>| process args
 
 

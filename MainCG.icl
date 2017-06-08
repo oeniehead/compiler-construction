@@ -27,17 +27,16 @@ getArgs = fmap (drop 1) getCl
 
 main :: IO ()
 main =
-	//print "=========================="			>>|
 	getArgs										>>= \args.
 	let file = hd args in
 	//print ("File: " +++ file)					>>|
 	readFileM file								>>= \string.
-	//print ("contents: \"" +++ string +++ "\"")	>>|
 	case compile string of
-		Left msg		 = print msg
+		Left msg		 = withWorld \w.
+			((), snd (fclose (stderr <<< msg) w) )
 		Right (instructions, log) =
-			print instructions //>>|
-			//print log
+			//print instructions >>|
+			print log
 where
 	compile :: String -> Either String (String, String)
 	compile prog = uptoCodeGeneration

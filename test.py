@@ -19,11 +19,12 @@ expectBindingError = [
     '3D.spl',
     'arguments.spl',
     'booleans.spl',
-    'Example.spl',
     'fundecl.spl',
+    'nothing.spl',
     'problematic.spl',
-	'stress.spl',
-	'SumProduct.spl'
+    'problematic_programs.spl',
+    'stress.spl',
+    'SumProduct.spl'
     ]
 
 expectTypeError = [

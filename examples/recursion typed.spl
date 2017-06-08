@@ -15,3 +15,6 @@ f(a,b,c) :: a Bool [Bool] -> a{ // type: A.a: a Bool [Bool] -> a
 	}
 }
 
+main () :: -> Void {
+    return;
+}

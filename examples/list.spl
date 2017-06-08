@@ -3,3 +3,7 @@ equals(a, b) :: [a] [a] -> Bool {
 	if (isEmpty(a) || isEmpty(b)) { return False; }
 	return (a.hd == b.hd) && equals (a.tl, b.tl);	
 }
+
+main () :: -> Void {
+    return;
+}

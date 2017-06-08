@@ -18,3 +18,7 @@ tabbed () :: -> Void
 	// Indented with tabs
 	return;
 }
+
+main () :: -> Void {
+    return;
+}

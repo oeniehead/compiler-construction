@@ -27,3 +27,7 @@ month(dayOfYear)::Int -> Int{Int tempDay = dayOfYear;Int month = 0;
 	}
 return month + 1;
 }
+
+main () :: -> Void {
+    return;
+}

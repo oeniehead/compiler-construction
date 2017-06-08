@@ -13,3 +13,7 @@ Int g = True;
 
 var h = 50;
 var i = True;
+
+main () :: -> Void {
+    return;
+}

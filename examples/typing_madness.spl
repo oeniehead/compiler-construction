@@ -10,3 +10,7 @@ g(a,b){
 h(){
 	x = 1 : x;
 }
+
+main () :: -> Void {
+    return;
+}

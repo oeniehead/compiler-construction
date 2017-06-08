@@ -7,3 +7,8 @@ keepGoingI (n) :: Int -> Void {
 keepGoingR (n) :: Int -> Void {
 	return keepGoingR (n + 1);
 }
+
+main () :: -> Void {
+    return;
+}
+

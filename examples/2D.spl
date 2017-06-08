@@ -11,3 +11,7 @@ transpose (p1, p2) :: (Int, Int) (Int, Int) -> (Int, Int)
 scale(p, scalar) :: (Int, Int) Int -> (Int, Int) {
 	return (p.fst * scalar, p.snd * scalar);
 }
+
+main () :: -> Void {
+    return;
+}

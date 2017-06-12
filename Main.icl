@@ -3,24 +3,15 @@ implementation module Main
 import System.CommandLine
 import System.IO
 import Control.Monad
-import Control.Applicative
-import Data.Functor
-import Data.List
-import StdGeneric
-import GenString
+import Data.Either
+import StdArray
+from Data.Func import $
 
 import CustomStdEnv
-
-import Scanner
-import AST
-import Parser
 import Error
 import Misc
 import PrettyPrinter
-import Data.Either
-import BindingAnalysis
-import CodeGenerator
-
+import Scanner, Parser, BindingAnalysis, TypeChecker, CodeGenerator
 
 getCl :: IO [String]
 getCl = IO getCommandLine
@@ -30,48 +21,46 @@ getArgs = fmap (drop 1) getCl
 
 main :: IO ()
 main =
-	print "=========================="			>>|
 	getArgs										>>= \args.
-	let file = hd args in
-	print ("File: " +++ file)					>>|
-	readFileM file								>>= \string.
-	print ("contents: \"" +++ string +++ "\"")	>>|
-	print "scanning..."							>>|
-	let (tokens, sErrors) = scanner string in
-	(if (not (isEmpty sErrors))
-		(	print "Scanner errors:")
-		(	return ())
-	)											>>|
-	printAll sErrors							>>|
-//	print "Tokens:"								>>|
-//	printAll tokens								>>|
-	print "Parsing..."							>>|
-	case parser tokens of
-		(Left pErrors) = print "Parser Errors:" >>| printAll pErrors
-		(Right ast)
-				=
-					print "Syntax tree"			>>|
-					printAll ast				>>|
-					print "Pretty print:"		>>|
-					print (prettyPrint ast)		>>|
-					print "Binding:"			>>|
-					return (doBindingAnalysis ast) >>= \result.
-					case result of
-						(Left bErrors) = print "Binding Errors:" >>| printAll bErrors
-						(Right ast)		= print (prettyPrint ast)
-	
+	if ( not (length args == 1))
+		(print "Usage: spl.exe <source-file>")
+		let file = hd args in
+		readFileM file								>>= \string.
+		case compile string of
+			Left log		 = withWorld \w.
+				((), snd (fclose (stderr <<< (errorsToString log)) w) )
+			Right (ssmcode, log) =
+				print (errorsToString log) >>|
+				writeFileM ( (hd $ split file '.') +++ ".ssm" ) ssmcode
 					
-					
-	
+where
+	compile :: String -> Either [Error] (String, [Error])
+	compile prog 
+	# (tokens, sLog) = scanner prog
+	# (parseRes, pLog) = parser tokens
+	| isNothing parseRes	= Left (sLog ++ pLog) 
+	# (parseOk, ast) = fromJust parseRes
+	# bindingRes = doBindingAnalysis ast
+	= case bindingRes of
+		Left bLog			= Left (sLog ++ pLog ++ bLog)
+		Right (ast`,bLog)	=
+			case typeInference ast` of
+				(Nothing, tLog)		= Left (sLog ++ pLog ++ bLog ++ tLog)
+				(Just ast``, tLog)	= case codeGenerator ast`` of
+					(Nothing, cLog)		= Left (sLog ++ pLog ++ bLog ++ tLog ++ cLog)
+					(Just ssmcode, cLog)=
+						if parseOk
+							(Right (ssmcode , sLog ++ pLog ++ bLog ++ tLog ++ cLog))
+							(Left (sLog ++ pLog ++ bLog ++ tLog ++ cLog))
 
-import GenString
-import StdOverloaded
-
-instance toString Decl where toString d = gString{|*|} d
-
-printAll :: [a] -> IO () | toString a
-printAll [a:as] = print a >>| (printAll as)
-printAll []	  = return ()
+split :: String Char -> [String]
+split s c = split` 0 s
+where
+	split` i s
+	| i < size s
+		| select s i == c	= [s % (0,i-1):split` 0 (s % (i+1, size s))]
+		| otherwise			= split` (i+1) s
+	| otherwise				= [s]
 
 
 Start w = execIO main w

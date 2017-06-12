@@ -2,6 +2,7 @@
 *.prp
 *.exe
 *.log
+*.ssm
 Clean System Files
 sapl
 __pycache__

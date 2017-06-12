@@ -692,8 +692,22 @@ instance match Expr where
 				match iwf t		>>= \(subst, iwf`).
 				return (subst, ExpIdent iwf $ setMetaType m t)
 			ExpBinOp e1 op e2	_ = case op of
-					OpPlus		= match2 expression bIntType bIntType bIntType t
+					OpPlus		=
+						getEnv >>= \env.
+						try
+							(match2 expression bIntType bIntType bIntType t)
+							(
+								setEnv env >>|
+								match2 expression bCharType bCharType bCharType t
+							)
 					OpMinus		= match2 expression bIntType bIntType bIntType t
+						getEnv >>= \env.
+						try
+							(match2 expression bIntType bIntType bIntType t)
+							(
+								setEnv env >>|
+								match2 expression bCharType bCharType bCharType t
+							)
 					OpMult		= match2 expression bIntType bIntType bIntType t
 					OpDiv		= match2 expression bIntType bIntType bIntType t
 					OpMod		= match2 expression bIntType bIntType bIntType t

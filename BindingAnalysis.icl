@@ -285,7 +285,7 @@ spliceMainComponent =
 findCycle :: (BDMonad (Maybe [NodeIndex]))
 findCycle = getDepends >>= \depends.
 		let indices = nodeIndices depends
-			maxDepth = mapSize depends.nodes
+			maxDepth = (mapSize depends.nodes) + 1
 			cycle = foldl (localFindCycle maxDepth depends) Nothing indices
 		in 	return cycle
 	where 
@@ -474,15 +474,13 @@ instance process FunDecl where
 			processVariables = sequence_ (
 					map (
 						\(VarDecl _ name expr _).
-								registerLocalVariable name
-							>>|	forGlobalVariable name (
-								depends (VarItem name)
-							)
-							>>| process expr
+								process expr
+							>>| registerLocalVariable name
 					) decls
 				)
 			
 		in	enter (FuncItem id)
+		>>| getOrAddNode (FuncItem id)
 		>>| sequence_ (
 			map (registerLocalVariable) aArg
 		)
@@ -526,13 +524,7 @@ instance process Expr where
 	process (ExpIdent field _) =
 			unFieldId field
 		>>= \name.
-			debug {
-					pos = zero,
-					severity = DEBUG,
-					stage = Binding,
-					message = "Found field " +++ name
-				}
-		>>| forGlobalVariable name (
+			forGlobalVariable name (
 				depends (VarItem name)
 			)
 	process (ExpBinOp exprA _ exprB _) =

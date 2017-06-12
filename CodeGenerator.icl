@@ -906,7 +906,7 @@ where
 			
 			For a direct assignment, we just move the new value to the stack.
 		**/
-	generateCode (StmtAss (JustId id metadata_2) expr metadata) = 
+	/*generateCode (StmtAss (JustId id metadata_2) expr metadata) = 
 				getType expr >>= \type.
 				// Get value of expression
 				generateCode expr
@@ -922,7 +922,7 @@ where
 				// Store the result in the variable
 			>>| registerInstructions [
 					Inst "sta" [Val "0"] Nothing
-				]
+				]*/
 			
 		/**
 			1. Generate code for the expression.
@@ -937,18 +937,27 @@ where
 				- Push the new value to the heap
 				- Restore HP
 		**/
-	generateCode (StmtAss withField=:(WithField id field metadata_2) expr metadata) = 
+	generateCode (StmtAss withField expr metadata) = 
 			//	registerInstructions [
 			//		"ldr" [Val "HP"] Nothing
 			//	]
-			//>>| 
+			//>>|
+			getType expr >>= \type.
+				// Get value of expression
 				generateCode expr
+				// Use the data
+			>>| use type
 				// This will push the address of the variable on the stack
 			>>| resolveFieldedAddress withField
-				// Store result of expr on location
+				// Free the original value of the LHS
 			>>| registerInstructions [
-				Inst "sta" [Val "0"] Nothing
-			]
+					Inst "lds" [Val "0"] Nothing
+				]
+			>>| free type
+				// Store the result in the variable
+			>>| registerInstructions [
+					Inst "sta" [Val "0"] Nothing
+				]
 		
 		
 		/**
@@ -1130,8 +1139,7 @@ where generateCode (FunCall id exprs metadata) =
 				freeArguments = sequence_ (
 						map (\expr. getType expr >>= free) (exprs)
 					)
-			in  generateLabel >>= \returnLabel. 	
-				registerInstructions [
+			in  registerInstructions [
 						Inst "ldc" [Val "0"] Nothing // Return value
 					]
 					// Push arguments

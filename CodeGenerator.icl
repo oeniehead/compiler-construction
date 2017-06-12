@@ -6,6 +6,7 @@ import Data.Functor
 import Control.Applicative
 import Control.Monad
 import Data.Either
+import Data.Tuple
 
 from StdList import filter
 
@@ -118,6 +119,15 @@ instance Functor CGMonad where
 cgOptional :: Bool (CGMonad ()) -> (CGMonad ())
 cgOptional True a = a
 cgOptional False _ = return ()
+
+codeGenerator :: AST -> (Maybe String, [Error])
+codeGenerator ast =
+	let
+		(CG generator)	= generateCode ast
+		(result, state) = generator zero
+	in case result of
+		Nothing	= (Nothing, state.errors)
+		Just () = (Just (runCodeLabeler state.instructions), state.errors) 
 	
 uptoCodeGeneration ::
 	String

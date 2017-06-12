@@ -553,7 +553,6 @@ instance matchN VarDecl where
 					<++"' conflicts with derived type '" <++ derivedType <++ "'(specified type may be too general)") >>|
 				fail //Is caught in matchN instance for Decl
 			)
-
 	/*
 	Probleem bij recursief typechecken:
 	var p = []; // Type [Bool]
@@ -580,7 +579,7 @@ instance matchN VarDecl where
 		gevallen hetzelfde te laten werken
 	*/
 
-returnVar	:== "%return"//todo: weghalen of laten staan?
+returnVar	:== "%return"
 noInfoType	:== IdentType "%noInfo"
 
 instance matchN FunDecl where
@@ -670,7 +669,7 @@ instance matchN Stmt where
 				(case rType of
 					IdentType "%noInfo"	=
 						makeFreshIdentType >>= \a.
-						addVarType returnVar a
+						addVarType returnVar a //Moeten we niet eerst matchen op de expressie??
 					VoidType			= error "Non-matching return types" >>| fail
 					type				= return type)
 											>>= \a.
@@ -700,7 +699,7 @@ instance match Expr where
 								setEnv env >>|
 								match2 expression bCharType bCharType bCharType t
 							)
-					OpMinus		= match2 expression bIntType bIntType bIntType t
+					OpMinus		=
 						getEnv >>= \env.
 						try
 							(match2 expression bIntType bIntType bIntType t)

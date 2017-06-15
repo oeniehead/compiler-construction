@@ -274,13 +274,13 @@ lookupItem item =
 							})
 			
 spliceMainComponent :: (BDMonad ())
-spliceMainComponent =
-		lookupItem (FuncItem "main") >>= \mainIndex.
+spliceMainComponent = return ()
+		/*lookupItem (FuncItem "main") >>= \mainIndex.
 			(BD \st. 
 				let
 					parts = components st.depends
 					mainComponent = hd (filter (\graph. isJust (getNodeData mainIndex graph)) parts)
-				in	(Just (), {st & depends = mainComponent}))
+				in	(Just (), {st & depends = mainComponent}))*/
 
 findCycle :: (BDMonad (Maybe [NodeIndex]))
 findCycle = getDepends >>= \depends.

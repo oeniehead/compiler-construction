@@ -494,6 +494,29 @@ allocate expr = generateLabel >>= \boundLabel.
 					// Common return
 					Inst "nop" [] (Just endLabel)
 				]
+			
+check :: Type ->(CGMonad ())
+check (BasicType _) = 
+	registerInstructions [
+					// Copy reference and load block on stack
+					Inst "ajs" [Val "-1"] Nothing			
+				]
+check type = 	generateLabel >>= \endLabel.
+				generateLabel >>= \ignoreLabel.
+				registerInstructions [
+					// Copy reference and load counter
+					Inst "lds" [Val "0"] Nothing,
+					Inst "lda" [Val "-2"] Nothing,
+					Inst "ldc" [Val "0"] Nothing,
+					Inst "eq" [] Nothing,
+					Inst "brf" [Label ignoreLabel] Nothing	
+				]
+			>>| free type
+			>>| registerInstructions [
+					Inst "bra" [Label endLabel] Nothing,
+					Inst "ajs" [Val "-1"] (Just ignoreLabel),
+					Inst "nop" [] (Just endLabel)
+				]
 				
 free :: Type -> (CGMonad ())
 free (TupleType aType bType) = 
@@ -562,8 +585,10 @@ free (ArrayType type) =
 				generateLabel >>= \ignoreLabel.
 				// TODO: this can be factored out
 				registerInstructions [
-					// Decrease counter
+					// Load counter
 					Inst "lds" [Val "-2"] Nothing,
+					
+					// Decrease counter
 					Inst "ldc" [Val "1"] Nothing,
 					Inst "sub" [] Nothing,
 					
@@ -976,7 +1001,7 @@ where
 	generateCode (StmtFunCall funCall=:(FunCall id _ metadata) _) = 
 				generateCode funCall
 			>>| cgOptional (id <> "isEmpty" && id <> "read" && id <> "print") (  
-					free (fromJust metadata.type)
+					check (fromJust metadata.type)
 				)
 			
 		/**

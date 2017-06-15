@@ -3,6 +3,7 @@ function (n, b, l) :: Int Bool [Int] -> [Int]
     print(n);
     print(b);
     print(l);
+	return l;
 }
 
 main () :: -> Void
@@ -17,5 +18,7 @@ main () :: -> Void
     function(10, True);
     // Three arguments
     function(15, False, list);
+	// Four arguments
+    function(15, False, list, list);
 }
 

@@ -96,7 +96,7 @@ uptoParse prog fscanErrors fparseFail fParserErrors =
  */
 parseAST :: Parser Token (Bool, AST)
 parseAST =
-	pMany
+	pMany //Here, it is important that pWithRecover will eat at least one token, else pMany will loop indefinately!
 		(
 			pGetPos		>>= \pos.
 			pWithRecover [TerminatorToken, Brace Close Curly] parseDecl >>= \mRes.

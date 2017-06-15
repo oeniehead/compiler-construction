@@ -311,7 +311,7 @@ debug msg = M \st.(Just (), {st & errors = [makeError st.MState.pos DEBUG TypeCh
 logEnv :: MMonad ()
 logEnv =
 	getEnv		>>= \env.
-	debug ("\nEnv vars:\n" +++ (mapToString env.varTypes) +++ "\nEnv funcs:\n" +++ (mapToString env.funcTypes))
+	debug ("Env vars:\n" +++ (mapToString env.varTypes) +++ "Env funcs:\n" +++ (mapToString env.funcTypes))
 
 getEnv :: MMonad Env
 getEnv = M \st.(Just st.env,st)
@@ -429,7 +429,6 @@ instance Functor MMonad where
 // The first one is to be used if the AST object has a type. The second one is to be used if 
 // the AST object does not have a type. (statements, declarations)
 
-// @param env:		The environment built up so far
 // @param a:		The AST object to type-check
 // @param type:		The current information known from the context, if this AST object has a type
 // @return:			An MMonad with:
@@ -438,7 +437,6 @@ instance Functor MMonad where
 //					MMonad fails or gives an error if the type inference fails
 class match a :: a Type -> MMonad (Subst, a)
 
-// @param env:		The environment built up so far
 // @param a:		The AST object to type-check
 // @return:			An MMonad with:
 //					- the AST with updated type information in the metadata
@@ -500,7 +498,7 @@ uptoTypeInference prog fscanErrors fparseFail fparseErrors fbindingErrors ftypeE
 instance matchN AST where
 	matchN ast =
 		addFuncType "print"		(TS (singleton "a") (FuncType [IdentType "a"]				VoidType))		>>|
-		addFuncType "read"		(TS (singleton "a") (FuncType [] 							(IdentType "a")))	>>|
+		addFuncType "read"		(TS (singleton "a") (FuncType [] 							(IdentType "a")))	>>| //todo
 		addFuncType "isEmpty"	(TS (singleton "a") (FuncType [ArrayType (IdentType "a")]	bBoolType))		>>|
 		addFuncType "main"		(TS newSet			(FuncType [] 							VoidType))		>>|
 		matchAllN ast
@@ -669,7 +667,7 @@ instance matchN Stmt where
 				(case rType of
 					IdentType "%noInfo"	=
 						makeFreshIdentType >>= \a.
-						addVarType returnVar a //Moeten we niet eerst matchen op de expressie??
+						addVarType returnVar a
 					VoidType			= error "Non-matching return types" >>| fail
 					type				= return type)
 											>>= \a.
@@ -696,7 +694,9 @@ instance match Expr where
 						try
 							(match2 expression bIntType bIntType bIntType t)
 							(
-								setEnv env >>|
+								setEnv env							>>|
+								(M \st. (Just (), {st & errors = tl st.errors}))	>>|
+								// Remove the error from matching with inttypes
 								match2 expression bCharType bCharType bCharType t
 							)
 					OpMinus		=
@@ -705,6 +705,8 @@ instance match Expr where
 							(match2 expression bIntType bIntType bIntType t)
 							(
 								setEnv env >>|
+								(M \st. (Just (), {st & errors = tl st.errors}))	>>|
+								// Remove the error from matching with inttypes
 								match2 expression bCharType bCharType bCharType t
 							)
 					OpMult		= match2 expression bIntType bIntType bIntType t
@@ -774,16 +776,13 @@ instance match FunCall where
 		setPos m.MetaData.pos								>>|
 		getFuncType name									>>= \(TS boundedTypes fType).
 		makeInstanceFuncType (toList boundedTypes) fType	>>= \(FuncType argTypes rType).
-		matchAll (zip2 args argTypes)						>>= \(subst, args`).
-		mUnify (t ^^ subst) (rType ^^ subst)				>>= \s1.
-		return (s1 O subst, FunCall name args` $ setMetaType m t)
-// twee doelen:
-// checken of typing klopt 
-//		f :: A.a:[Int] a [a] -> a
-//		f([1], 1, ['c'])
-// unification van unknown variabelen
-//      var x = []; //lijst van int
-//		f(x,1,[]);
+		if ( not $ (length args) == (length argTypes))
+			(error ("Incorrect number of arguments for '" +++ name +++ "'") >>| fail)
+			(
+				matchAll (zip2 args argTypes)						>>= \(subst, args`).
+				mUnify (t ^^ subst) (rType ^^ subst)				>>= \s1.
+				return (s1 O subst, FunCall name args` $ setMetaType m t)
+			)
 
 makeInstanceFuncType :: [TypeVar] Type -> MMonad Type
 makeInstanceFuncType [bounded:rest] fType =

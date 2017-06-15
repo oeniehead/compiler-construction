@@ -2,7 +2,3 @@ main() :: -> Void
 {
 	return (((((((((((((5)))))))))))));
 }
-
-main () :: -> Void {
-    return;
-}

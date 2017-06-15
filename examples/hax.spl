@@ -1,0 +1,13 @@
+[Char] x = []; // use x
+
+f(){
+	return x;
+}
+
+
+main(){
+	var y = 'a' : 's' : 's' : 'w' : 'o' : 'r' : 'd' : [];
+	f();			// free return value x!
+	y = 'p' : y;	// new list object gets allocated at x
+	print(x);		// print the password!!!
+}

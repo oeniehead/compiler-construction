@@ -17,7 +17,6 @@ expectParseError = [
 
 expectBindingError = [
     '3D.spl',
-    'arguments.spl',
     'booleans.spl',
     'fundecl.spl',
     'nothing.spl',
@@ -28,6 +27,7 @@ expectBindingError = [
     ]
 
 expectTypeError = [
+    'arguments.spl',
     'constants.spl',
     'more_parenthesis.spl',
     'problematic_programs.spl',
@@ -109,5 +109,5 @@ def runTest(excluded, expectToFail, outFile):
     logSucceededTests = sys.argv[2] in ['True', 'true', 't', '1'] if len(sys.argv) > 2 else True
     timeout           = int(sys.argv[1]) if len(sys.argv) > 1 else 5
     testSpecs = [(os.path.join(example_dir, file), FAIL if file in expectToFail else SUCCESS)
-                 for file in os.listdir(example_dir) if file not in excluded]
+                 for file in os.listdir(example_dir) if file not in excluded and not file.endswith(".ssm")]
     test(testSpecs, outFile, timeout, logSucceededTests)

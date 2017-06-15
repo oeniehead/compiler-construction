@@ -385,8 +385,14 @@ resolveFieldedAddress (WithField nest field	metadata) =
 generatePrint :: Type -> (CGMonad ())
 generatePrint (BasicType bType) = 
 		case bType of
-			(CharType) = registerInstructions [Inst "trap" [Val "1"] Nothing]	
-			(_) = registerInstructions [Inst "trap" [Val "0"] Nothing]
+			(CharType) = registerInstructions [
+					Inst "lds" [Val "0"] Nothing,
+					Inst "trap" [Val "1"] Nothing
+				]	
+			(_) = registerInstructions [
+					Inst "lds" [Val "0"] Nothing,
+					Inst "trap" [Val "0"] Nothing
+				]
 generatePrint (TupleType aType bType) =
 			registerInstructions [
 				Inst "lds" [Val "0"] Nothing,
@@ -967,9 +973,11 @@ where
 			
 			Just pass through here.
 		**/
-	generateCode (StmtFunCall funCall=:(FunCall _ _ metadata) _) = 
+	generateCode (StmtFunCall funCall=:(FunCall id _ metadata) _) = 
 				generateCode funCall
-			>>| free (fromJust metadata.type)
+			>>| cgOptional (id <> "isEmpty" && id <> "read" && id <> "print") (  
+					free (fromJust metadata.type)
+				)
 			
 		/**
 			1. Generate code for expression.
@@ -1139,9 +1147,11 @@ where generateCode (FunCall id exprs metadata) =
 				freeArguments = sequence_ (
 						map (\expr. getType expr >>= free) (exprs)
 					)
-			in  registerInstructions [
-						Inst "ldc" [Val "0"] Nothing // Return value
-					]
+			in	cgOptional (id <> "isEmpty" && id <> "read" && id <> "print") (  
+					registerInstructions [
+							Inst "ldc" [Val "0"] Nothing // Return value
+						]
+					)
 					// Push arguments
 				>>|	loadArguments
 				>>| cgOptional (id == "isEmpty") (

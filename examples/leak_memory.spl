@@ -1,0 +1,26 @@
+f(a) :: a -> Void{
+	return;
+}
+
+main(){
+	Int i = 0;
+	[Int] l = [];
+	
+	while(True){
+		l = makeList(100);
+		print(i);
+		f(l);
+		i = i + 1;
+	}
+	return;
+}
+
+makeList(n){
+	[Int] l = [];
+	
+	while(n > 0){
+		l = n : l;
+		n = n - 1;
+	}
+	return l;
+}

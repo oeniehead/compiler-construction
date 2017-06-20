@@ -6,3 +6,4 @@
 Clean System Files
 sapl
 __pycache__
+!/demo_files/*.exe

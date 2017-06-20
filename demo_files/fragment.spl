@@ -1,0 +1,17 @@
+f()
+{
+	var a = [];
+	var b = [];
+	var c = [];
+	
+	return (a, c);
+}
+
+
+main()
+{
+	var x = f();
+	var y = [];
+	
+	return;
+}

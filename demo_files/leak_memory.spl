@@ -1,0 +1,17 @@
+leak()
+{
+	var x = [];
+	
+	return x;
+}
+
+main()
+{
+	var i = 100;
+	
+	while(i > 0)
+	{
+		leak();
+		i = i - 1;
+	}
+}

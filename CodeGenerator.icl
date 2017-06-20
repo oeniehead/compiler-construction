@@ -190,7 +190,7 @@ error :: Error -> CGMonad ()
 error e = CG \st. (Nothing, { st & errors = [e : st.errors]})
 
 debug :: Error -> CGMonad ()
-debug e = CG \st. (Just (), { st & errors = st.errors ++ [e]})
+debug e = return() //CG \st. (Just (), { st & errors = st.errors ++ [e]})
 
 registerGlobalVariable :: String -> CGMonad ()
 registerGlobalVariable name = 
@@ -842,6 +842,9 @@ where
 						Inst "nop" [] (Just (name +++ "_entry"))
 					]
 				>>| variableCode
+				>>| registerInstructions [
+						Inst "nop" [] (Just (name +++ "_stmts"))
+					]
 				>>| inFunction name (
 						stmtCode
 					)
@@ -1014,6 +1017,7 @@ where
 				getArgumentCount
 			>>= \arguments. getFunction
 			>>= \function. generateCode expr
+			>>| use (fromJust (getMeta expr).type)
 			>>| registerInstructions [
 					Inst "stl" [Val (toString (-2 - arguments))] Nothing,
 					Inst "bra" [Label (function +++ "_end")] Nothing
@@ -1147,13 +1151,22 @@ where
 			// Reverse order! b is on x-1 and a on x!
 			allocate (
 				generateCode expr_b >>|
-				generateCode expr_a >>|
-				registerInstructions [
-					// Push both items to the heap.
-					//Inst "stmh" [Val "2"] Nothing
-				]
+				generateCode expr_a
 			)
-		
+		 	>>| registerInstructions [
+					Inst "lds" [Val "0"] Nothing,
+					Inst "lda" [Val "0"] Nothing
+				]
+			>>| use (fromJust (getMeta expr_a).type)
+		 	>>| registerInstructions [
+		 			Inst "ajs" [Val "-1"] Nothing,
+					Inst "lds" [Val "0"] Nothing,
+					Inst "lda" [Val "-1"] Nothing
+				]
+			>>| use (fromJust (getMeta expr_b).type)
+			>>| registerInstructions [
+		 			Inst "ajs" [Val "-1"] Nothing
+				]
 instance generateCode FunCall
 where generateCode (FunCall id exprs metadata) =
 		/**

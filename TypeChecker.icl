@@ -502,8 +502,7 @@ instance matchN AST where
 		addFuncType "isEmpty"	(TS (singleton "a") (FuncType [ArrayType (IdentType "a")]	bBoolType))		>>|
 		addFuncType "main"		(TS newSet			(FuncType [] 							VoidType))		>>|
 		matchAllN ast				>>= \(subst, ast`).
-		debug (prettyPrint ast`)	>>|
-		logEnv						>>|
+		//logEnv						>>|
 		return (subst, ast`)
 
 instance matchN Decl where

@@ -465,7 +465,7 @@ inferenceEnv ast = mRun (matchN ast >>| getEnv)
 
 typeInference :: AST -> ((Maybe AST), [Error])
 typeInference ast
-# (maybeRes, log) = mRun (matchN ast)
+# (maybeRes, log) = mRun (matchN ast >>= \r. logEnv >>| return r)
 | any (\e -> isMember e.severity [FATAL, ERROR]) log = (Nothing, log)
 =	(case maybeRes of
 		Nothing				= Nothing
@@ -501,7 +501,10 @@ instance matchN AST where
 		addFuncType "read"		(TS (singleton "a") (FuncType [] 							(IdentType "a")))	>>| //todo
 		addFuncType "isEmpty"	(TS (singleton "a") (FuncType [ArrayType (IdentType "a")]	bBoolType))		>>|
 		addFuncType "main"		(TS newSet			(FuncType [] 							VoidType))		>>|
-		matchAllN ast
+		matchAllN ast				>>= \(subst, ast`).
+		debug (prettyPrint ast`)	>>|
+		logEnv						>>|
+		return (subst, ast`)
 
 instance matchN Decl where
 	matchN d = case d of

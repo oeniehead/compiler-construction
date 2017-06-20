@@ -1,7 +1,11 @@
 main()
 {
-	Int a = read();
+	Int a = 1;
+	var b = 1 : 2 : 3 : 4 : 5 : [];
+	
+	a = read();
 
 	print(a);
+	print(b);
 	return;
 }

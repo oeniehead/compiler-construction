@@ -386,11 +386,9 @@ generatePrint :: Type -> (CGMonad ())
 generatePrint (BasicType bType) = 
 		case bType of
 			(CharType) = registerInstructions [
-					Inst "lds" [Val "0"] Nothing,
 					Inst "trap" [Val "1"] Nothing
 				]	
 			(_) = registerInstructions [
-					Inst "lds" [Val "0"] Nothing,
 					Inst "trap" [Val "0"] Nothing
 				]
 generatePrint (TupleType aType bType) =
@@ -1181,37 +1179,21 @@ where generateCode (FunCall id exprs metadata) =
 				loadArguments = sequence_ (
 						map (\expr. generateCode expr >>| getType expr >>= use) (exprs)
 					)
+					
+				simpleArguments = sequence_ (
+						map (\expr. generateCode expr) (exprs)
+					)
 				
 				freeArguments = sequence_ (
 						map (\expr. getType expr >>= free) (exprs)
 					)
 			in	cgOptional (id <> "isEmpty" && id <> "read" && id <> "print") (  
-					registerInstructions [
-							Inst "ldc" [Val "0"] Nothing // Return value
-						]
-					)
-					// Push arguments
-				>>|	loadArguments
-				>>| cgOptional (id == "isEmpty") (
-						registerInstructions [
-							Inst "lda" [Val "0"] Nothing,
-							Inst "ldc" [Val "0"] Nothing,
-							Inst "eq" [] Nothing,
-							Inst "sta" [Val "-1"] Nothing
-						]
-					) 
-				>>| cgOptional (id == "read") (
-						generateRead (fromJust metadata.type)
-					) 
-				>>| cgOptional (id == "print") (
-						return () >>= \_.
-							let
-								head = hd exprs
-							in 	getType head 
-							>>= \type.generatePrint (type)
-					) 
-				>>| cgOptional (id <> "isEmpty" && id <> "read" && id <> "print") (
-						registerInstructions [
+							registerInstructions [
+								Inst "ldc" [Val "0"] Nothing // Return value
+							]
+							// Push arguments
+						>>|	loadArguments
+						>>| registerInstructions [
 							// Push old MP to stack
 							Inst "ldr" [Register MP] Nothing,
 							// Set MP, take SP and add 1 (so it points to the return address)
@@ -1224,8 +1206,29 @@ where generateCode (FunCall id exprs metadata) =
 							// Clean arguments from stack
 							//Inst "ajs" [Val (toString (~(length exprs)))] Nothing
 						]
+						>>| freeArguments
 					)
-				>>| freeArguments
+				>>| cgOptional (id == "isEmpty") (
+							simpleArguments
+						>>| registerInstructions [
+							Inst "lda" [Val "0"] Nothing,
+							Inst "ldc" [Val "0"] Nothing,
+							Inst "eq" [] Nothing,
+							Inst "sta" [Val "-1"] Nothing
+						]
+					) 
+				>>| cgOptional (id == "read") (
+						generateRead (fromJust metadata.type)
+					) 
+				>>| cgOptional (id == "print") (
+						simpleArguments
+						 >>= \_.
+							let
+								head = hd exprs
+							in 	getType head 
+							>>= \type.generatePrint (type)
+					) 
+				
 			
 
 

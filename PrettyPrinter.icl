@@ -24,17 +24,48 @@ instance toShow Decl where
 	toShow (Var varDecl)	= toShow varDecl
 	toShow (Fun funDecl)	= toShow funDecl
 	
+instance toShow MetaData where
+	toShow m = case m.type of
+					(Nothing) = rtrn "";
+					(Just type) = rtrn " // " + toShow type
+					
+instance toShow MetaDataTS where
+	toShow m = case m.typeScheme of
+					(Nothing) = rtrn "";
+					(Just type) = rtrn " // " + toShow type
+					
+/*instance toShow Type where
+	toShow (BasicType type) = toShow type
+	toShow (TupleType typeA typeB) = (rtrn "(") + (toShow typeA) + (rtrn ", ") + (toShow typeB) + (rtrn ")") 
+	toShow (ArrayType type) = (rtrn "[") + (toShow type) + (rtrn "]")
+	toShow (IdentType type) = rtrn type
+	toShow (FuncType args res) = (concat args (rtrn " ")) + (rtrn " -> ") + toShow res
+	toShow (VoidType) = rtrn "Void"
+	
+instance toShow TypeVar where
+	toShow var = rtrn var
+	
+instance toShow TypeScheme where
+	toShow (TS free type) = 
+		let
+			list = toList free
+		in	case (length list) of
+				(0) = toShow type
+				_ = (rtrn "A.") + (concat list (rtrn " ")) + (rtrn ":") + toShow type*/
+	
+	
+	
 instance toShow VarDecl where
-	toShow (VarDecl mType id expr _) = 
-		typeShow + rtrn " " + rtrn id + rtrn " = " + toShow expr + rtrn ";"
+	toShow (VarDecl mType id expr metadata) = 
+		typeShow + rtrn " " + rtrn id + rtrn " = " + toShow expr + rtrn ";" + toShow metadata
 	where
 		typeShow = case mType of
 			(Just type)	= toShow type
 			Nothing		= rtrn "var"
 			
 instance toShow FunDecl where
-	toShow (FunDecl id args mType varDecls stmts _) =
-		rtrn id + rtrn "( " + concat args (rtrn ", ") + rtrn " )" + type + nl + rtrn "{" + 
+	toShow (FunDecl id args mType varDecls stmts metadata) =
+		rtrn id + rtrn "( " + concat args (rtrn ", ") + rtrn " )" + type + toShow metadata + nl + rtrn "{" + 
 			( indentBlock (
 				(concat varDecls nl) + separator + (concat stmts (nl)) 
 			)) + rtrn "}" 

@@ -190,7 +190,7 @@ error :: Error -> CGMonad ()
 error e = CG \st. (Nothing, { st & errors = [e : st.errors]})
 
 debug :: Error -> CGMonad ()
-debug e = CG \st. (Just (), { st & errors = st.errors ++ [e]})
+debug e = return() //CG \st. (Just (), { st & errors = st.errors ++ [e]})
 
 registerGlobalVariable :: String -> CGMonad ()
 registerGlobalVariable name = 

@@ -1,0 +1,1 @@
+java -jar ssm.jar --file %1 --cli

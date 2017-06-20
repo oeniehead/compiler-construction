@@ -1,0 +1,7 @@
+main()
+{
+	Int a = read();
+
+	print(a);
+	return;
+}

@@ -274,7 +274,7 @@ lookupItem item =
 							})
 			
 spliceMainComponent :: (BDMonad ())
-spliceMainComponent = return ()
+spliceMainComponent = lookupItem (FuncItem "main") >>| return ()
 		/*lookupItem (FuncItem "main") >>= \mainIndex.
 			(BD \st. 
 				let

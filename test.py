@@ -18,6 +18,7 @@ expectParseError = [
 expectBindingError = [
     '3D.spl',
     'booleans.spl',
+	'Example.spl',
     'fundecl.spl',
     'nothing.spl',
     'problematic.spl',

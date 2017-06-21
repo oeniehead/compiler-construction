@@ -465,6 +465,8 @@ allocate expr = generateLabel >>= \boundLabel.
 					Inst "ldr" [Register BP] Nothing,
 					Inst "swp" [] Nothing,
 					Inst "str" [Register BP] Nothing,
+					Inst "ldc" [Val "2"] Nothing,
+					Inst "add" [] Nothing,
 					Inst "bra" [Label endLabel] Nothing,
 					
 					// HP == BP, allocate and copy HP to BP
